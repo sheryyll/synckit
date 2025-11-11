@@ -64,3 +64,9 @@ notes.txt
 # Generated documentation (if using auto-doc generators)
 # Uncomment if you use tools like rustdoc or typedoc to generate docs locally
 # docs/generated/
+
+# TLA+ Model Checker
+protocol/tla/states/
+protocol/tla/*.st
+protocol/tla/*.fp
+protocol/tla/tla2tools.jar
