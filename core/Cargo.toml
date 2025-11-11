@@ -1,0 +1,64 @@
+[package]
+name = "synckit-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["SyncKit Contributors"]
+description = "High-performance sync engine for local-first applications"
+license = "MIT"
+repository = "https://github.com/yourusername/synckit"
+keywords = ["sync", "crdt", "local-first", "offline-first", "realtime"]
+categories = ["wasm", "data-structures", "network-programming"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]  # WASM + native library
+
+[dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# WASM support (for Phase 5)
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+# Utilities
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1.0"
+
+[dev-dependencies]
+# Testing
+criterion = "0.5"        # Benchmarking
+proptest = "1.0"         # Property-based testing
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "web-sys", "js-sys"]
+
+# Benchmark harness
+[[bench]]
+name = "lww_bench"
+harness = false
+path = "benches/lww_bench.rs"
+
+[[bench]]
+name = "vector_clock_bench"
+harness = false
+path = "benches/vector_clock_bench.rs"
+
+[profile.release]
+opt-level = 3
+lto = true          # Link-time optimization
+codegen-units = 1   # Better optimization
+strip = true        # Strip symbols for smaller binary
+
+[profile.release.package."*"]
+opt-level = 3
+
+# WASM-specific optimizations
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"     # Optimize for size
