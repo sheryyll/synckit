@@ -17,9 +17,10 @@
 
 pub mod pn_counter;
 pub mod or_set;
-// TODO: Phase 3 - Implement remaining CRDTs
-// pub mod fractional_index;
+pub mod fractional_index;
+// TODO: Phase 3 - Implement text CRDT
 // pub mod text;
 
 pub use pn_counter::PNCounter;
 pub use or_set::ORSet;
+pub use fractional_index::FractionalIndex;
