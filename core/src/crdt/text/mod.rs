@@ -49,6 +49,7 @@
 
 mod id;
 mod item;
+#[allow(clippy::module_inception)]
 mod text;
 
 pub use id::ItemId;

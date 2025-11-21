@@ -121,21 +121,6 @@ impl Text {
         deleted_ids
     }
 
-    /// Get the current text content (excluding deleted items)
-    pub fn to_string(&self) -> String {
-        let mut result = String::new();
-
-        for &id in &self.sequence {
-            if let Some(item) = self.items.get(&id) {
-                if !item.deleted {
-                    result.push_str(&item.content);
-                }
-            }
-        }
-
-        result
-    }
-
     /// Get the length of the text (excluding deleted items)
     pub fn len(&self) -> usize {
         self.sequence
@@ -357,6 +342,19 @@ impl Text {
 
         // Merge blocks for optimization
         self.merge_blocks();
+    }
+}
+
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for &id in &self.sequence {
+            if let Some(item) = self.items.get(&id) {
+                if !item.deleted {
+                    write!(f, "{}", item.content)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 

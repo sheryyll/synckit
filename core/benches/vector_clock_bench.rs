@@ -54,7 +54,8 @@ fn bench_merge(c: &mut Criterion) {
 
                 b.iter(|| {
                     let mut clock_copy = clock1.clone();
-                    black_box(clock_copy.merge(&clock2));
+                    clock_copy.merge(&clock2);
+                    black_box(());
                 });
             },
         );

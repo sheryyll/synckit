@@ -132,25 +132,29 @@ impl FractionalIndex {
                 BASE // Treat right's end as one past largest digit
             };
 
-            if left_digit < right_digit {
-                if left_digit + 1 < right_digit {
-                    // Space between digits: use average and we're done
-                    let mid = (left_digit + right_digit) / 2;
-                    result.push(Self::value_to_char(mid));
-                    break;
-                } else {
-                    // Adjacent digits (e.g., 'a' and 'b'): copy left, continue deeper
+            match left_digit.cmp(&right_digit) {
+                std::cmp::Ordering::Less => {
+                    if left_digit + 1 < right_digit {
+                        // Space between digits: use average and we're done
+                        let mid = (left_digit + right_digit) / 2;
+                        result.push(Self::value_to_char(mid));
+                        break;
+                    } else {
+                        // Adjacent digits (e.g., 'a' and 'b'): copy left, continue deeper
+                        result.push(Self::value_to_char(left_digit));
+                        i += 1;
+                        // Continue to find space in remaining positions
+                    }
+                }
+                std::cmp::Ordering::Equal => {
+                    // Same digit: copy and continue
                     result.push(Self::value_to_char(left_digit));
                     i += 1;
-                    // Continue to find space in remaining positions
                 }
-            } else if left_digit == right_digit {
-                // Same digit: copy and continue
-                result.push(Self::value_to_char(left_digit));
-                i += 1;
-            } else {
-                // left_digit > right_digit shouldn't happen (assertion prevents)
-                unreachable!("left should be < right");
+                std::cmp::Ordering::Greater => {
+                    // left_digit > right_digit shouldn't happen (assertion prevents)
+                    unreachable!("left should be < right");
+                }
             }
 
             // Safety: prevent infinite loops
@@ -191,6 +195,7 @@ impl FractionalIndex {
     }
 
     /// Create from a position string (for deserialization)
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(position: String) -> Self {
         Self { position }
     }

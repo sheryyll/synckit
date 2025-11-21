@@ -118,13 +118,17 @@ pub fn apply_delta(doc: &mut Document, delta: &Delta) {
         match doc.fields.get(field_path) {
             Some(local_field) => {
                 // Field exists locally - use LWW merge
-                if delta_field.timestamp > local_field.timestamp {
-                    doc.fields.insert(field_path.clone(), delta_field.clone());
-                } else if delta_field.timestamp == local_field.timestamp {
-                    // Tie-breaking: use client_id comparison
-                    if delta_field.timestamp.client_id > local_field.timestamp.client_id {
+                match delta_field.timestamp.cmp(&local_field.timestamp) {
+                    std::cmp::Ordering::Greater => {
                         doc.fields.insert(field_path.clone(), delta_field.clone());
                     }
+                    std::cmp::Ordering::Equal => {
+                        // Tie-breaking: use client_id comparison
+                        if delta_field.timestamp.client_id > local_field.timestamp.client_id {
+                            doc.fields.insert(field_path.clone(), delta_field.clone());
+                        }
+                    }
+                    std::cmp::Ordering::Less => {} // local is newer, keep local
                 }
                 // else: local is newer, keep local
             }
@@ -158,13 +162,17 @@ pub fn merge_deltas(delta1: &Delta, delta2: &Delta) -> Delta {
         match merged_fields.get(field_path) {
             Some(field1) => {
                 // Field in both deltas - use LWW
-                if field2.timestamp > field1.timestamp {
-                    merged_fields.insert(field_path.clone(), field2.clone());
-                } else if field2.timestamp == field1.timestamp {
-                    // Tie-breaking
-                    if field2.timestamp.client_id > field1.timestamp.client_id {
+                match field2.timestamp.cmp(&field1.timestamp) {
+                    std::cmp::Ordering::Greater => {
                         merged_fields.insert(field_path.clone(), field2.clone());
                     }
+                    std::cmp::Ordering::Equal => {
+                        // Tie-breaking
+                        if field2.timestamp.client_id > field1.timestamp.client_id {
+                            merged_fields.insert(field_path.clone(), field2.clone());
+                        }
+                    }
+                    std::cmp::Ordering::Less => {} // field1 is newer, keep it
                 }
             }
             None => {

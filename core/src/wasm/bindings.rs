@@ -85,6 +85,12 @@ pub struct WasmVectorClock {
     inner: VectorClock,
 }
 
+impl Default for WasmVectorClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmVectorClock {
     /// Create a new empty vector clock

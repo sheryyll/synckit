@@ -189,13 +189,13 @@ impl DocumentDelta {
             .base_version
             .as_ref()
             .map(vector_clock_from_protocol)
-            .unwrap_or_else(VectorClock::new);
+            .unwrap_or_default();
 
         let new_version = proto
             .new_version
             .as_ref()
             .map(vector_clock_from_protocol)
-            .unwrap_or_else(VectorClock::new);
+            .unwrap_or_default();
 
         let changes = proto
             .changes

@@ -120,7 +120,8 @@ fn bench_apply_delta(c: &mut Criterion) {
 
                 b.iter(|| {
                     let mut doc_copy = base_doc.clone();
-                    black_box(apply_delta(black_box(&mut doc_copy), black_box(&delta)));
+                    apply_delta(black_box(&mut doc_copy), black_box(&delta));
+                    black_box(());
                 });
             },
         );
@@ -167,8 +168,8 @@ fn bench_merge_deltas(c: &mut Criterion) {
                 b.iter(|| {
                     // Merge all deltas pairwise
                     let mut result = deltas[0].clone();
-                    for i in 1..deltas.len() {
-                        result = merge_deltas(&result, &deltas[i]);
+                    for delta in deltas.iter().skip(1) {
+                        result = merge_deltas(&result, delta);
                     }
                     black_box(result);
                 });

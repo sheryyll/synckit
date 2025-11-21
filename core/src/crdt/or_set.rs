@@ -105,7 +105,7 @@ where
 
         self.elements
             .entry(element)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(tag);
     }
 
@@ -163,7 +163,7 @@ where
         for (element, tags) in &other.elements {
             self.elements
                 .entry(element.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .extend(tags.clone());
         }
 

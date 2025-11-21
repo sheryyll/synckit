@@ -290,18 +290,18 @@ mod tests {
                 // Winner should be determined by:
                 // 1. Higher client_id
                 // 2. If client_ids equal, use JSON value comparison for determinism
-                let expected_winner = if client2 > client1 {
-                    &value2
-                } else if client1 > client2 {
-                    &value1
-                } else {
+                let expected_winner = match client2.cmp(&client1) {
+                    std::cmp::Ordering::Greater => &value2,
+                    std::cmp::Ordering::Less => &value1,
+                    std::cmp::Ordering::Equal => {
                     // Same client, same timestamp - use value comparison
                     let value1_json = serde_json::to_string(&value1).unwrap();
                     let value2_json = serde_json::to_string(&value2).unwrap();
-                    if value2_json > value1_json {
-                        &value2
-                    } else {
-                        &value1
+                        if value2_json > value1_json {
+                            &value2
+                        } else {
+                            &value1
+                        }
                     }
                 };
 
@@ -361,10 +361,10 @@ mod tests {
             }
 
             // Document should be in valid state
-            prop_assert!(doc.fields.len() > 0);
+            prop_assert!(!doc.fields.is_empty());
 
             // All fields should have valid timestamps
-            for (_, field) in &doc.fields {
+            for field in doc.fields.values() {
                 prop_assert!(field.timestamp.clock > 0);
                 prop_assert!(!field.timestamp.client_id.is_empty());
             }

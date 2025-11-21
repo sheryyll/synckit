@@ -92,10 +92,10 @@ impl VectorClock {
             let self_clock = self.get(client_id);
             let other_clock = other.get(client_id);
 
-            if self_clock < other_clock {
-                less = true;
-            } else if self_clock > other_clock {
-                greater = true;
+            match self_clock.cmp(&other_clock) {
+                std::cmp::Ordering::Less => less = true,
+                std::cmp::Ordering::Greater => greater = true,
+                std::cmp::Ordering::Equal => {}
             }
         }
 
@@ -119,10 +119,10 @@ impl VectorClock {
             let self_clock = self.get(client_id);
             let other_clock = other.get(client_id);
 
-            if self_clock < other_clock {
-                less = true;
-            } else if self_clock > other_clock {
-                greater = true;
+            match self_clock.cmp(&other_clock) {
+                std::cmp::Ordering::Less => less = true,
+                std::cmp::Ordering::Greater => greater = true,
+                std::cmp::Ordering::Equal => {}
             }
         }
 
