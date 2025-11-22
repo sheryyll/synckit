@@ -199,7 +199,7 @@ We'll respond within 48 hours.
 
 Special thanks to all contributors who helped make SyncKit possible!
 
-See [AUTHORS](AUTHORS) file for complete list.
+See [AUTHORS](AUTHORS.md) file for complete list.
 
 ---
 
