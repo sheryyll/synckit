@@ -10,7 +10,14 @@
     "build": "npm run build -w sdk",
     "build:examples": "npm run build --workspaces --if-present",
     "dev:collaborative-editor": "npm run dev -w @synckit-examples/collaborative-editor",
-    "dev:project-management": "npm run dev -w @synckit-examples/project-management"
+    "dev:project-management": "npm run dev -w @synckit-examples/project-management",
+    "test": "npm run test -w sdk && cd server/typescript && bun test && cd ../.. && cd core && cargo test && cd ..",
+    "test:watch": "npm run test -w sdk -- --watch",
+    "test:coverage": "npm run test -w sdk -- --coverage",
+    "lint": "npm run lint -w sdk && cd server/typescript && bun run lint && cd ../..",
+    "format": "cd server/typescript && bun run format && cd ../..",
+    "type-check": "npm run lint -w sdk && cd server/typescript && bun run typecheck && cd ../..",
+    "check": "npm run lint && npm run type-check && npm test"
   },
   "devDependencies": {}
 }

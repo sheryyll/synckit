@@ -163,45 +163,44 @@ cd synckit
 git remote add upstream https://github.com/Dancode-188/synckit.git
 
 # 4. Install dependencies
-npm install
+npm install  # Installs SDK and example workspaces
 # or
 bun install
 
-# 5. Build the core (WASM)
-cd core
-cargo build --target wasm32-unknown-unknown
-wasm-pack build --target web
-cd ..
-
-# 6. Build the SDK
-cd sdk
-npm install
-npm run build
-cd ..
-
-# 7. Build the server
+# 5. Install server dependencies (not a workspace)
 cd server/typescript
 bun install
 cd ../..
 
-# 8. Run tests
+# 6. Build the core (WASM) - Optional, pre-built WASM included
+# Only needed if modifying Rust code
+cd core
+bash scripts/build-wasm.sh  # or scripts/build-wasm.ps1 on Windows
+cd ..
+
+# 7. Build the SDK
+npm run build
+
+# 8. Verify setup
 npm test
 ```
 
 ### Verify Setup
 
 ```bash
-# All tests should pass
+# Run all tests (core + SDK + server)
 npm test
 
-# Core tests
-cd core && cargo test
+# Or run specific test suites:
+npm test -w sdk              # SDK tests only
+cd core && cargo test         # Core Rust tests
+cd server/typescript && bun test  # Server tests
 
-# SDK tests
-cd sdk && npm test
+# Run linter
+npm run lint
 
-# Server tests
-cd server/typescript && bun test
+# Type check
+npm run type-check
 ```
 
 ### Finding Issues to Work On
@@ -455,16 +454,16 @@ pub fn merge_documents(local: &Document, remote: &Document) -> Document {
 
 Install SyncKit:
 
-\`\`\`bash
+```bash
 npm install @synckit/sdk
-\`\`\`
+```
 
 Initialize in your app:
 
-\`\`\`typescript
+```typescript
 const sync = new SyncKit()
 const doc = sync.document<Todo>('todo-1')
-\`\`\`
+```
 
 <!-- ❌ Bad -->
 ## quick start
@@ -490,8 +489,7 @@ const sync = new SyncKit()
 
 **Stuck?** We're here to help!
 
-- **[Discord](#)** - Real-time chat *(coming soon)*
-- **[GitHub Discussions](https://github.com/Dancode-188/synckit/discussions)** - Q&A
+- **[GitHub Discussions](https://github.com/Dancode-188/synckit/discussions)** - Q&A and community chat
 - **[Issues](https://github.com/Dancode-188/synckit/issues)** - Bug reports and features
 
 **Mentorship:**
@@ -505,7 +503,6 @@ const sync = new SyncKit()
 - ✅ Listed in AUTHORS file
 - ✅ Mentioned in release notes
 - ✅ Thanked in project README
-- ✅ Special badge on Discord *(coming soon)*
 
 **Top contributors:**
 - Featured on project homepage
@@ -519,7 +516,7 @@ const sync = new SyncKit()
 - Review progress, discuss roadmap
 - Q&A with maintainers
 
-**Details:** Announced in Discord *(coming soon)*
+**Details:** Announced in [GitHub Discussions](https://github.com/Dancode-188/synckit/discussions)
 
 ---
 
@@ -527,7 +524,7 @@ const sync = new SyncKit()
 
 **Still have questions?** Reach out:
 
-- 💬 [Discord Community](#) *(coming soon)*
+- 💬 [GitHub Discussions](https://github.com/Dancode-188/synckit/discussions)
 - 📧 [Email](mailto:danbitengo@gmail.com)
 - 🐛 [Open an Issue](https://github.com/Dancode-188/synckit/issues)
 
