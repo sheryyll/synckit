@@ -4,7 +4,7 @@
 
 **True offline-first sync for modern apps—without vendor lock-in**
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Dancode-188/synckit/test.yml?branch=main)](https://github.com/Dancode-188/synckit/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Dancode-188/synckit/ci.yml?branch=main)](https://github.com/Dancode-188/synckit/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Bundle Size](https://img.shields.io/badge/bundle%20size-49KB%20(44KB%20lite)-brightgreen)](https://bundlephobia.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
