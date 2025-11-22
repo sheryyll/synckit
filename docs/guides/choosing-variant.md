@@ -9,19 +9,21 @@ SyncKit ships with two optimized variants to balance bundle size with functional
 ```
 Start here
 │
-└─ Do you need network synchronization with a server?
+└─ Will you need network synchronization in the future?
    │
-   ├─ YES → Use Default variant
-   │         ✅ 49 KB gzipped
-   │         ✅ Server sync with WebSocket
-   │         ✅ Protocol support (delta sync)
-   │         ✅ Recommended for most apps (95% of use cases)
+   ├─ YES or MAYBE → Use Default variant
+   │                 ✅ 49 KB gzipped
+   │                 ✅ WASM includes protocol support (ready for v0.2.0+)
+   │                 ✅ Future-proof for server sync
+   │                 ✅ Recommended for most apps (95% of use cases)
+   │                 ⚠️  v0.1.0: Local-first only (network sync coming soon)
    │
-   └─ NO  → Use Lite variant
-             ✅ 44 KB gzipped (smallest)
-             ✅ Local-only sync
-             ✅ Perfect for offline-first apps without backend
-             ✅ 5 KB smaller than Default
+   └─ NO, NEVER → Use Lite variant
+                  ✅ 44 KB gzipped (smallest)
+                  ✅ Local-only sync
+                  ✅ Perfect for offline-first apps without backend
+                  ✅ 5 KB smaller than Default
+                  ⚠️  v0.1.0: Same features as Default (both local-only)
 ```
 
 ---
@@ -35,29 +37,38 @@ Start here
 import { SyncKit } from '@synckit/sdk'
 ```
 
-**Includes:**
+**SDK v0.1.0 Features (What You Can Use Today):**
 - ✅ Document sync (Last-Write-Wins)
 - ✅ Vector clocks (causality tracking)
 - ✅ Conflict resolution (automatic)
-- ✅ Offline-first (works without network)
-- ✅ IndexedDB persistence
-- ✅ Network protocol (Protocol Buffers)
-- ✅ Delta computation (efficient sync)
-- ✅ Server synchronization (WebSocket)
-- ✅ DateTime serialization
-- ❌ Text CRDT *(coming in v0.2.0)*
-- ❌ Counters *(coming in v0.2.0)*
-- ❌ Sets *(coming in v0.2.0)*
+- ✅ Offline-first (local storage only)
+- ✅ IndexedDB & Memory storage
+- ❌ Network sync *(WASM ready, SDK coming in v0.2.0)*
+- ❌ Text CRDT *(WASM ready, SDK coming in v0.2.0)*
+- ❌ Counters *(WASM ready, SDK coming in v0.2.0)*
+- ❌ Sets *(WASM ready, SDK coming in v0.2.0)*
 
-**Perfect for:**
-- Todo applications with server sync
-- CRM systems
-- Project management tools
-- Dashboards and admin panels
-- E-commerce applications
-- Social media apps (posts, profiles)
-- Settings sync across devices
-- Form data with server sync
+**WASM Binary Includes (Ready for Future SDK):**
+- ✅ Network protocol (Protocol Buffers)
+- ✅ Delta computation
+- ✅ DateTime serialization
+- ✅ Text/Counter/Set CRDT implementations
+
+**Note:** v0.1.0 is LOCAL-FIRST ONLY. The WASM binary includes protocol support, but the TypeScript SDK doesn't expose network features yet. This means Default variant is future-proof for when network sync is added in v0.2.0+.
+
+**Perfect for (v0.1.0 - Local-First):**
+- Todo applications (local storage)
+- Note-taking apps
+- Offline-first PWAs
+- Browser extensions
+- Electron apps with local storage
+- Apps planning to add server sync later (future-proof)
+
+**Future (v0.2.0+ with network sync):**
+- CRM systems with server sync
+- Project management with team collaboration
+- Dashboards syncing across devices
+- E-commerce with cloud sync
 - **Any app that syncs structured data (JSON objects) with a server**
 
 **Real-world examples:**
@@ -65,13 +76,14 @@ import { SyncKit } from '@synckit/sdk'
 - [Project Management App](../../examples/project-management/) - Kanban board with drag-and-drop
 - [Collaborative Editor](../../examples/collaborative-editor/) - Real-time document editing
 
-**Code example:**
+**Code example (v0.1.0 - Local-First):**
 ```typescript
 import { SyncKit } from '@synckit/sdk'
 
 const sync = new SyncKit({
-  serverUrl: 'ws://localhost:8080',
-  storage: 'indexeddb'
+  storage: 'indexeddb',
+  name: 'my-app'
+  // serverUrl accepted but not used in v0.1.0
 })
 
 await sync.init()
@@ -81,24 +93,25 @@ const task = sync.document<Task>('task-123')
 await task.update({
   title: 'Build feature',
   status: 'in-progress',
-  assignee: 'alice@example.com',
-  dueDate: new Date('2025-12-01')
+  assignee: 'alice@example.com'
 })
 
-// Syncs automatically to server
-// Works offline, queues operations
-// Resolves conflicts automatically
+// ✅ Works: Local storage with IndexedDB
+// ✅ Works: Offline-first, instant writes
+// ✅ Works: Conflict resolution (if using multiple tabs)
+// ❌ v0.1.0: No server sync (coming in v0.2.0)
 ```
 
 **When to use:**
-- ✅ You're building a CRUD app with server sync
+- ✅ You might need server sync in the future (future-proof)
 - ✅ Data is structured (objects, arrays, primitives)
-- ✅ You want network synchronization
-- ✅ You need cross-device sync
+- ✅ You want the latest features as they're added
+- ✅ 5 KB difference doesn't matter to you
 - ✅ **This is the recommended default for 95% of applications**
 
 **When NOT to use:**
-- ❌ You don't need server sync → Use Lite variant (save 5 KB)
+- ❌ You're 100% sure you'll never need server sync → Use Lite variant (save 5 KB)
+- ❌ Bundle size is absolutely critical → Use Lite variant
 
 **Bundle size:** 49 KB (WASM) + ~4 KB (SDK) = **~53 KB total**
 
@@ -111,19 +124,22 @@ await task.update({
 import { SyncKit } from '@synckit/sdk/lite'
 ```
 
-**Includes:**
+**SDK v0.1.0 Features (Same as Default in v0.1.0):**
 - ✅ Document sync (Last-Write-Wins)
 - ✅ Vector clocks (causality tracking)
 - ✅ Conflict resolution (automatic)
-- ✅ Offline-first (works without network)
-- ✅ IndexedDB persistence
+- ✅ Offline-first (local storage only)
+- ✅ IndexedDB & Memory storage
+- ❌ Network sync *(not in WASM, not in SDK)*
+- ❌ Text/Counter/Set *(not in WASM, not in SDK)*
+
+**WASM Binary Does NOT Include:**
 - ❌ Network protocol (Protocol Buffers)
 - ❌ Delta computation
-- ❌ Server synchronization
 - ❌ DateTime serialization
-- ❌ Text CRDT
-- ❌ Counters
-- ❌ Sets
+- ❌ Text/Counter/Set CRDT implementations
+
+**Note:** v0.1.0 Lite has the SAME features as Default - both are local-only. The only difference is bundle size (5 KB smaller) and future-proofing (Default will get network features in v0.2.0+, Lite won't).
 
 **Perfect for:**
 - Local-only applications
@@ -140,12 +156,13 @@ import { SyncKit } from '@synckit/sdk/lite'
 - Form data persistence (local draft)
 - Shopping carts (local-only)
 
-**Code example:**
+**Code example (v0.1.0):**
 ```typescript
 import { SyncKit } from '@synckit/sdk/lite'
 
 const sync = new SyncKit({
-  storage: 'indexeddb'
+  storage: 'indexeddb',
+  name: 'todo-app'
 })
 
 await sync.init()
@@ -158,19 +175,21 @@ await todo.update({
   priority: 'high'
 })
 
-// Works offline, persists to IndexedDB
-// No network sync - perfect for local-first
+// ✅ Works: Local storage with IndexedDB
+// ✅ Works: Offline-first, instant writes
+// ✅ Same functionality as Default in v0.1.0
+// 💡 5 KB smaller than Default
 ```
 
 **When to use:**
-- ✅ You don't need server synchronization
-- ✅ Local-only data storage is sufficient
-- ✅ Want the absolute smallest bundle
+- ✅ You're 100% sure you'll never need server sync
+- ✅ Local-only storage is all you need
+- ✅ Want the absolute smallest bundle (5 KB matters)
 - ✅ Building offline-first without backend
 
 **When NOT to use:**
-- ❌ You need server sync → Use Default variant
-- ❌ You need cross-device synchronization → Use Default variant
+- ❌ You might need server sync someday → Use Default variant (future-proof)
+- ❌ Not sure about requirements → Use Default variant (only 5 KB larger)
 
 **Bundle size:** 44 KB (WASM) + ~4 KB (SDK) = **~48 KB total**
 
@@ -244,18 +263,30 @@ Understanding the size trade-offs:
 
 ## 🎓 Common Scenarios
 
-### Scenario 1: Todo Application with Server Sync
+### Scenario 1: Todo Application (Local or Future Server Sync)
 
 **Recommended:** Default variant
 
 **Why:**
 - Structured data (tasks, status, due dates)
-- Server sync for cross-device access
-- Offline-first with automatic sync
+- Future-proof for server sync (v0.2.0+)
+- v0.1.0: Works great as local-first app
 
 **Bundle:** ~53 KB (SyncKit) + ~130 KB (React) = ~183 KB total
 
-**Example:** [Todo App](../../examples/todo-app/)
+**Example:** [Todo App](../../examples/todo-app/) - Currently local-only, ready for server sync
+
+---
+
+### Scenario 1b: Todo Application (Never Needs Server)
+
+**Recommended:** Lite variant (save 5 KB)
+
+**Why:**
+- Same features as Default in v0.1.0
+- 5 KB smaller if you're certain you won't need server sync
+
+**Bundle:** ~48 KB (SyncKit) + ~130 KB (React) = ~178 KB total
 
 ---
 
@@ -278,12 +309,13 @@ Understanding the size trade-offs:
 
 **Why:**
 - Cards are structured data (title, description, status)
-- Server sync for team collaboration
-- Offline-first with automatic conflict resolution
+- Future team collaboration with server sync (v0.2.0+)
+- v0.1.0: Works as single-user local app
+- Future-proof for multi-user features
 
 **Bundle:** ~53 KB (SyncKit) + ~130 KB (React) + ~28 KB (dnd-kit) = ~211 KB total
 
-**Example:** [Project Management App](../../examples/project-management/)
+**Example:** [Project Management App](../../examples/project-management/) - Currently local-only
 
 ---
 
@@ -293,14 +325,15 @@ Understanding the size trade-offs:
 
 **Why:**
 - Document-level sync for editor content
-- Real-time collaboration via server sync
-- Works offline with automatic merge
+- Future real-time collaboration (v0.2.0+)
+- v0.1.0: Single-user editor with local persistence
+- Future-proof for multi-user editing
 
 **Bundle:** ~53 KB (SyncKit) + ~130 KB (React) + ~124 KB (CodeMirror) = ~307 KB total
 
-**Example:** [Collaborative Editor](../../examples/collaborative-editor/)
+**Example:** [Collaborative Editor](../../examples/collaborative-editor/) - Currently local-only
 
-**Note:** This example uses document-level sync (LWW), not character-level Text CRDT. Character-level CRDTs are coming in v0.2.0.
+**Note:** v0.1.0 uses document-level sync (LWW), not character-level Text CRDT. True collaborative editing with character-level CRDTs is coming in v0.2.0.
 
 ---
 
@@ -395,15 +428,15 @@ Use browser dev tools to measure actual bundle impact:
 
 ### Q: Which variant should most apps use?
 
-**A:** Default variant. It's only 5 KB larger than Lite and gives you server sync capability. Even if you don't use server sync immediately, having it available is valuable.
+**A:** Default variant. It's only 5 KB larger than Lite and is future-proof for server sync (coming in v0.2.0+). In v0.1.0, both variants have the same features (local-only), but Default will get network sync when it's ready.
 
 ### Q: What's missing from Lite?
 
-**A:** Lite excludes:
-- Protocol Buffers (network sync protocol): ~3 KB
+**A:** Lite's WASM binary excludes:
+- Protocol Buffers (network protocol): ~3 KB
 - DateTime library (chrono): ~2 KB
 
-These are only needed for network synchronization with a server.
+**Important:** In v0.1.0, BOTH variants are local-only. Default includes these in the WASM binary for future use, but the SDK doesn't expose them yet. They'll be used when network sync is added in v0.2.0+.
 
 ### Q: Will my bundle really be ~50 KB?
 
@@ -439,7 +472,7 @@ This is just SyncKit. Your total bundle includes:
 
 ### Q: Why is the Collaborative Editor example using Default?
 
-**A:** The collaborative editor uses document-level sync (syncing the entire document content as a field), not character-level Text CRDT. This works well for most collaborative editing scenarios and is available today. True character-level Text CRDT is coming in v0.2.0.
+**A:** In v0.1.0, the collaborative editor is actually a SINGLE-USER editor with local persistence (not truly collaborative yet). It uses document-level sync to store the content. True multi-user collaboration with character-level Text CRDT is coming in v0.2.0. Default variant is recommended because it's future-proof for when network sync is added.
 
 ### Q: Is 5 KB really worth worrying about?
 
