@@ -18,7 +18,7 @@
 - ✅ IndexedDB & Memory storage adapters
 
 **React (`@synckit/sdk/react`):**
-- ✅ `SyncProvider`, `useSyncKit()`, `useSyncDocument()`
+- ✅ `SyncProvider`, `useSyncKit()`, `useSyncDocument()`, `useSyncField()`, `useSyncDocumentList()`
 
 **Config Options:**
 - ✅ `storage`, `name`, `clientId`
@@ -67,70 +67,75 @@ This document defines the TypeScript SDK API for SyncKit. The design follows the
 ```typescript
 import { SyncKit } from '@synckit/sdk'
 
-// Minimal configuration
+// Minimal configuration (auto-detects IndexedDB in browser, Memory in Node)
 const sync = new SyncKit()
+await sync.init()  // ✅ REQUIRED before using documents!
 
-// With server URL
+// With server URL (accepted but not used in v0.1.0)
 const sync = new SyncKit({
   serverUrl: 'ws://localhost:8080'
 })
+await sync.init()
 
-// Full configuration (many options planned for future versions)
+// Full v0.1.0 configuration
 const sync = new SyncKit({
-  serverUrl: 'ws://localhost:8080',  // Accepted in v0.1.0 but not yet used
+  serverUrl: 'ws://localhost:8080',  // ⚠️ Accepted but not yet used
   storage: 'indexeddb',              // ✅ WORKS: 'indexeddb' | 'memory'
   name: 'my-app',                    // ✅ WORKS: Storage namespace
   clientId: 'user-123',              // ✅ WORKS: Auto-generated if omitted
-  // Future options (not yet implemented):
-  // auth, offlineQueue, reconnect, reconnectDelay, maxReconnectDelay
 })
+await sync.init()
 ```
 
 ### Configuration Options
 
 ```typescript
+// ✅ v0.1.0 ACTUAL interface
 interface SyncKitConfig {
-  // Server URL (optional, works offline-only without)
-  url?: string
-  
-  // Authentication function
-  auth?: () => string | Promise<string>
-  
-  // Storage adapter
-  storage?: 'indexeddb' | 'opfs' | 'sqlite' | 'memory'
-  
-  // Offline queue configuration
-  offlineQueue?: boolean
-  offlineQueueSize?: number  // Max operations to buffer (default: 1000)
-  
-  // Reconnection configuration
-  reconnect?: boolean
-  reconnectDelay?: number
-  maxReconnectDelay?: number
-  
-  // Advanced
-  batchInterval?: number    // Batch operations every N ms (default: 100)
-  logLevel?: 'debug' | 'info' | 'warn' | 'error'
+  // Storage adapter (✅ WORKS in v0.1.0)
+  storage?: 'indexeddb' | 'memory' | StorageAdapter
+
+  // Storage namespace (✅ WORKS in v0.1.0)
+  name?: string
+
+  // Server URL (⚠️ ACCEPTED but not used in v0.1.0)
+  serverUrl?: string
+
+  // Client ID (✅ WORKS - auto-generated if omitted)
+  clientId?: string
 }
+
+// ❌ Future options (NOT in v0.1.0):
+// auth, offlineQueue, reconnect, batchInterval, logLevel
 ```
 
-### Connection Status
+### SyncKit Methods
 
 ```typescript
-// Get current status
-const status = sync.status
-// Returns: 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
+class SyncKit {
+  // ✅ Initialize WASM and storage (REQUIRED before use)
+  init(): Promise<void>
 
-// Subscribe to status changes
-sync.onStatusChange((status) => {
-  console.log('Connection status:', status)
-})
+  // ✅ Get or create a document (documents are cached)
+  document<T extends Record<string, unknown>>(id: string): SyncDocument<T>
 
-// Force reconnect
-await sync.reconnect()
+  // ✅ List all document IDs in storage
+  listDocuments(): Promise<string[]>
 
-// Disconnect
-await sync.disconnect()
+  // ✅ Delete entire document by ID
+  deleteDocument(id: string): Promise<void>
+
+  // ✅ Clear all documents from storage
+  clearAll(): Promise<void>
+
+  // ✅ Get the client ID
+  getClientId(): string
+
+  // ✅ Check if initialized
+  isInitialized(): boolean
+}
+
+// ❌ NOT in v0.1.0: connect(), disconnect(), status, onStatusChange(), reconnect()
 ```
 
 ---
@@ -148,6 +153,10 @@ interface Todo {
   completed: boolean
   dueDate?: Date
 }
+
+// ✅ REQUIRED: Initialize SyncKit first
+const sync = new SyncKit({ storage: 'indexeddb' })
+await sync.init()  // MUST call before using documents!
 
 // Get document reference
 const todo = sync.document<Todo>('todo-123')
@@ -170,8 +179,8 @@ await todo.update({
 // Get current value (one-time read)
 const currentTodo = todo.get()
 
-// Delete field
-await todo.update({ dueDate: null })
+// Delete a field
+await todo.delete('dueDate')
 
 // Unsubscribe when done
 unsubscribe()
@@ -180,46 +189,63 @@ unsubscribe()
 ### Document API
 
 ```typescript
-class Document<T> {
+// ✅ v0.1.0 ACTUAL API
+class SyncDocument<T extends Record<string, unknown>> {
+  // Initialize document (auto-called by sync.document(), but can call manually)
+  init(): Promise<void>
+
   // Subscribe to document changes
   subscribe(callback: (data: T) => void): () => void
-  
-  // Update document (partial update)
-  update(changes: Partial<T>): Promise<void>
+
+  // Get current value (synchronous)
+  get(): T
+
+  // Get a single field value
+  getField<K extends keyof T>(field: K): T[K] | undefined
 
   // Set a single field
   set<K extends keyof T>(field: K, value: T[K]): Promise<void>
 
-  // Get current value (synchronous)
-  get(): T
-  
-  // Delete document
-  delete(): Promise<void>
-  
+  // Update document (partial update)
+  update(changes: Partial<T>): Promise<void>
+
+  // Delete a field (NOT the whole document!)
+  delete<K extends keyof T>(field: K): Promise<void>
+
+  // Merge another document into this one
+  merge(other: SyncDocument<T>): Promise<void>
+
+  // Export to plain object
+  toJSON(): T
+
   // Get document ID
-  readonly id: string
-  
-  // Check if document exists
-  exists(): Promise<boolean>
+  getId(): string
+
+  // Get number of fields
+  getFieldCount(): number
+
+  // Clean up subscriptions
+  dispose(): void
 }
+
+// To delete entire document, use: sync.deleteDocument(id)
 ```
 
-### Batch Operations
+### Batch Operations *(Not in v0.1.0)*
 
 ```typescript
-// Update multiple documents atomically
+// ❌ NOT IMPLEMENTED - batch() method doesn't exist in v0.1.0
 await sync.batch(() => {
   todo1.update({ completed: true })
   todo2.update({ completed: true })
   todo3.update({ completed: false })
 })
-// All updates succeed or all fail
 ```
 
-### Query API (Future - Phase 6)
+### Query API *(Not in v0.1.0)*
 
 ```typescript
-// Subscribe to query results
+// ❌ NOT IMPLEMENTED - query() method doesn't exist in v0.1.0
 const todos = sync.query<Todo>()
   .where('completed', '==', false)
   .orderBy('dueDate', 'asc')
@@ -442,14 +468,19 @@ class CRDTSet<T> {
 
 **Package:** `@synckit/sdk/react`
 
-### useSyncDocument
+### Setup
 
 ```typescript
-import { useSyncDocument, SyncProvider } from '@synckit/sdk/react'
+import { SyncProvider } from '@synckit/sdk/react'
+import { SyncKit } from '@synckit/sdk'
 
-// Wrap your app with SyncProvider
+// ✅ Initialize SyncKit and wrap app with provider
 function App() {
-  const sync = new SyncKit({ storage: 'indexeddb' })
+  const [sync] = useState(() => new SyncKit({ storage: 'indexeddb' }))
+
+  useEffect(() => {
+    sync.init()  // Initialize on mount
+  }, [sync])
 
   return (
     <SyncProvider synckit={sync}>
@@ -457,27 +488,29 @@ function App() {
     </SyncProvider>
   )
 }
+```
 
+### useSyncDocument ✅ v0.1.0
+
+```typescript
 function TodoItem({ id }: { id: string }) {
   // Hook gets SyncKit from context, takes only id parameter
-  const [todo, { update }, doc] = useSyncDocument<Todo>(id)
+  const [todo, { set, update, delete: deleteField }, doc] = useSyncDocument<Todo>(id)
 
   return (
     <div>
       <input
         type="checkbox"
         checked={todo.completed || false}
-        onChange={(e) => update({ completed: e.target.checked })}
+        onChange={(e) => set('completed', e.target.checked)}
       />
       <span>{todo.text || ''}</span>
+      <button onClick={() => deleteField('completed')}>Clear</button>
     </div>
   )
 }
-```
 
-### Hook API
-
-```typescript
+// API signature
 function useSyncDocument<T>(
   id: string,
   options?: { autoInit?: boolean }
@@ -490,66 +523,99 @@ function useSyncDocument<T>(
   },
   SyncDocument<T>  // Raw document instance
 ]
-
-// Note: Requires <SyncProvider> wrapper to access SyncKit instance
 ```
 
-### useText
+### useSyncField ✅ v0.1.0
 
 ```typescript
-import { useText } from '@synckit/sdk/react'
+// Sync a single field instead of entire document
+function CompletedCheckbox({ id }: { id: string }) {
+  const [completed, setCompleted] = useSyncField<Todo, 'completed'>(id, 'completed')
 
-function NoteEditor({ id }: { id: string }) {
-  const [text, { insert, delete: del, append }] = useText(sync, id)
-  
   return (
-    <textarea
-      value={text}
-      onChange={(e) => {
-        // Handle text change
-        const newText = e.target.value
-        // Compute diff and apply operations
-      }}
+    <input
+      type="checkbox"
+      checked={completed || false}
+      onChange={(e) => setCompleted(e.target.checked)}
     />
   )
 }
+
+// API signature
+function useSyncField<T, K extends keyof T>(
+  id: string,
+  field: K
+): [T[K] | undefined, (value: T[K]) => Promise<void>]
 ```
 
-### useCounter
+### useSyncDocumentList ✅ v0.1.0
 
 ```typescript
-import { useCounter } from '@synckit/sdk/react'
+// List all document IDs
+function DocumentList() {
+  const documentIds = useSyncDocumentList()
 
-function LikeButton({ postId }: { postId: string }) {
-  const [likes, { increment, decrement }] = useCounter(sync, `likes-${postId}`)
-  
   return (
-    <button onClick={increment}>
-      👍 {likes} likes
-    </button>
+    <ul>
+      {documentIds.map(id => (
+        <li key={id}>{id}</li>
+      ))}
+    </ul>
   )
+}
+
+// API signature
+function useSyncDocumentList(): string[]
+```
+
+### useSyncKit ✅ v0.1.0
+
+```typescript
+// Access SyncKit instance from context
+function CustomComponent() {
+  const sync = useSyncKit()
+
+  const handleClearAll = async () => {
+    await sync.clearAll()
+  }
+
+  return <button onClick={handleClearAll}>Clear All</button>
 }
 ```
 
-### useSet
+### useText ❌ NOT in v0.1.0
 
 ```typescript
+// ❌ NOT IMPLEMENTED - Text CRDT not in v0.1.0
+import { useText } from '@synckit/sdk/react'
+
+function NoteEditor({ id }: { id: string }) {
+  const [text, { insert, delete: del, append }] = useText(id)
+  // ...
+}
+```
+
+### useCounter ❌ NOT in v0.1.0
+
+```typescript
+// ❌ NOT IMPLEMENTED - Counter CRDT not in v0.1.0
+import { useCounter } from '@synckit/sdk/react'
+
+function LikeButton({ postId }: { postId: string }) {
+  const [likes, { increment, decrement }] = useCounter(`likes-${postId}`)
+  // ...
+}
+```
+
+### useSet ❌ NOT in v0.1.0
+
+```typescript
+// ❌ NOT IMPLEMENTED - Set CRDT not in v0.1.0
 import { useSet } from '@synckit/sdk/react'
 
 function TagList({ docId }: { docId: string }) {
-  const [tags, { add, remove }] = useSet<string>(sync, `tags-${docId}`)
-  
-  return (
-    <div>
-      {Array.from(tags).map(tag => (
-        <span key={tag}>
-          {tag}
-          <button onClick={() => remove(tag)}>×</button>
-        </span>
-      ))}
-      <button onClick={() => add('new-tag')}>Add Tag</button>
-    </div>
-  )
+  const [tags, { add, remove }] = useSet<string>(`tags-${docId}`)
+  // ...
 }
 ```
 
@@ -592,43 +658,39 @@ Svelte stores (`@synckit/svelte`) are planned for a future release. Currently, o
 ### Error Types
 
 ```typescript
-class SyncError extends Error {
-  code: string
-  retryable: boolean
+// ✅ v0.1.0 ACTUAL error types
+class SyncKitError extends Error {
+  constructor(message: string, public code: string) {
+    super(message)
+  }
 }
 
-// Specific error types
-class NetworkError extends SyncError { code = 'NETWORK_ERROR'; retryable = true }
-class AuthError extends SyncError { code = 'AUTH_ERROR'; retryable = false }
-class PermissionError extends SyncError { code = 'PERMISSION_DENIED'; retryable = false }
-class ConflictError extends SyncError { code = 'CONFLICT'; retryable = true }
-class StorageError extends SyncError { code = 'STORAGE_ERROR'; retryable = true }
+// Specific error types in v0.1.0
+class StorageError extends SyncKitError { /* Storage operations */ }
+class WASMError extends SyncKitError { /* WASM initialization */ }
+class DocumentError extends SyncKitError { /* Document operations */ }
+
+// ❌ NOT in v0.1.0: NetworkError, AuthError, PermissionError, ConflictError
 ```
 
 ### Error Handling Patterns
 
 ```typescript
-// Try-catch for async operations
+// ✅ v0.1.0: Try-catch for async operations
 try {
+  await sync.init()
   await todo.update({ completed: true })
 } catch (error) {
-  if (error instanceof NetworkError) {
-    // Will be retried automatically if offline queue enabled
-    console.log('Update queued for later')
-  } else if (error instanceof PermissionError) {
-    // User doesn't have write permission
-    console.error('Permission denied')
+  if (error instanceof StorageError) {
+    console.error('Storage failed:', error.message)
+  } else if (error instanceof WASMError) {
+    console.error('WASM initialization failed:', error.message)
+  } else if (error instanceof SyncKitError) {
+    console.error('SyncKit error:', error.code, error.message)
   }
 }
 
-// Error event listener
-sync.onError((error) => {
-  console.error('Sync error:', error)
-  if (!error.retryable) {
-    // Show error to user
-    showErrorNotification(error.message)
-  }
-})
+// ❌ NOT in v0.1.0: sync.onError() event listener doesn't exist
 ```
 
 ---
@@ -663,7 +725,7 @@ export type AuthProvider = () => string | Promise<string>
 
 ## Examples
 
-### Complete Todo App
+### Complete Todo App (v0.1.0 - Local-First)
 
 ```typescript
 import { SyncKit } from '@synckit/sdk'
@@ -674,25 +736,16 @@ interface Todo {
   completed: boolean
 }
 
-// Initialize
+// ✅ Initialize (REQUIRED)
 const sync = new SyncKit({
-  serverUrl: 'ws://localhost:8080',  // For future network sync
-  // Note: auth config not yet implemented in v0.1.0
+  storage: 'indexeddb',
+  name: 'todo-app'
 })
+await sync.init()
 
-// Get all todos (future - query API)
-const todos = sync.query<Todo>()
-  .where('userId', '==', currentUserId)
-  .orderBy('createdAt', 'desc')
-
-// Subscribe to changes
-todos.subscribe((allTodos) => {
-  renderTodoList(allTodos)
-})
-
-// Add new todo
+// ✅ Add new todo
 async function addTodo(text: string) {
-  const id = generateId()
+  const id = crypto.randomUUID()
   const todo = sync.document<Todo>(id)
   await todo.update({
     id,
@@ -701,35 +754,38 @@ async function addTodo(text: string) {
   })
 }
 
-// Toggle todo
+// ✅ Toggle todo
 async function toggleTodo(id: string) {
   const todo = sync.document<Todo>(id)
   const current = todo.get()
   await todo.update({ completed: !current.completed })
 }
+
+// ✅ List all todos
+async function listTodos() {
+  const ids = await sync.listDocuments()
+  return ids.map(id => sync.document<Todo>(id).get())
+}
+
+// ✅ Delete todo
+async function deleteTodo(id: string) {
+  await sync.deleteDocument(id)
+}
 ```
 
-### Collaborative Editor
+### Collaborative Editor *(Not in v0.1.0)*
 
 ```typescript
+// ❌ NOT IMPLEMENTED - Text CRDT and network sync not in v0.1.0
 import { SyncKit } from '@synckit/sdk'
 
 const sync = new SyncKit({ serverUrl: 'ws://localhost:8080' })
-const noteText = sync.text('shared-note')
+await sync.init()
 
-// Sync with editor
-const editor = document.querySelector('textarea')
+const noteText = sync.text('shared-note')  // ❌ text() doesn't exist
 
 noteText.subscribe((content) => {
-  if (editor.value !== content) {
-    editor.value = content
-  }
-})
-
-editor.addEventListener('input', async () => {
-  // Simple approach: replace entire content
-  // Advanced: compute diff and send delta
-  await noteText.replace(0, await noteText.length(), editor.value)
+  // ...
 })
 ```
 
