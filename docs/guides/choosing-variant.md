@@ -9,81 +9,85 @@ SyncKit ships with two optimized variants to balance bundle size with functional
 ```
 Start here
 │
-└─ Will you need network synchronization in the future?
+└─ Do you need network synchronization?
    │
    ├─ YES or MAYBE → Use Default variant
-   │                 ✅ 49 KB gzipped
-   │                 ✅ WASM includes protocol support (ready for v0.2.0+)
-   │                 ✅ Future-proof for server sync
+   │                 ✅ 58 KB gzipped total
+   │                 ✅ Network sync with WebSocket (v0.1.0)
+   │                 ✅ Offline queue with auto-replay
+   │                 ✅ Network status tracking
    │                 ✅ Recommended for most apps (95% of use cases)
-   │                 ⚠️  v0.1.0: Local-first only (network sync coming soon)
    │
    └─ NO, NEVER → Use Lite variant
-                  ✅ 44 KB gzipped (smallest)
+                  ✅ 45 KB gzipped (smallest)
                   ✅ Local-only sync
                   ✅ Perfect for offline-first apps without backend
-                  ✅ 5 KB smaller than Default
-                  ⚠️  v0.1.0: Same features as Default (both local-only)
+                  ✅ 13 KB smaller than Default
 ```
 
 ---
 
 ## 📦 Variant Comparison
 
-### Default Variant - 49 KB gzipped (Recommended)
+### Default Variant - 58 KB gzipped (Recommended)
 
 **Import:**
 ```typescript
 import { SyncKit } from '@synckit/sdk'
 ```
 
-**SDK v0.1.0 Features (What You Can Use Today):**
+**SDK v0.1.0 Features (Fully Functional):**
 - ✅ Document sync (Last-Write-Wins)
 - ✅ Vector clocks (causality tracking)
 - ✅ Conflict resolution (automatic)
-- ✅ Offline-first (local storage only)
+- ✅ Offline-first with network sync
 - ✅ IndexedDB & Memory storage
-- ❌ Network sync *(WASM ready, SDK coming in v0.2.0)*
-- ❌ Text CRDT *(WASM ready, SDK coming in v0.2.0)*
-- ❌ Counters *(WASM ready, SDK coming in v0.2.0)*
-- ❌ Sets *(WASM ready, SDK coming in v0.2.0)*
+- ✅ **Network sync (WebSocket with auto-reconnection)**
+- ✅ **Offline queue with persistent storage**
+- ✅ **Network status tracking**
+- ✅ **Real-time document synchronization**
+- ❌ Text CRDT *(coming in v0.2.0)*
+- ❌ Counter CRDT *(coming in v0.2.0)*
+- ❌ Set CRDT *(coming in v0.2.0)*
 
-**WASM Binary Includes (Ready for Future SDK):**
+**WASM Binary Includes:**
 - ✅ Network protocol (Protocol Buffers)
 - ✅ Delta computation
 - ✅ DateTime serialization
-- ✅ Text/Counter/Set CRDT implementations
+- ✅ WebSocket client
+- ✅ Offline queue management
+- ✅ Text/Counter/Set CRDT implementations (for v0.2.0)
 
-**Note:** v0.1.0 is LOCAL-FIRST ONLY. The WASM binary includes protocol support, but the TypeScript SDK doesn't expose network features yet. This means Default variant is future-proof for when network sync is added in v0.2.0+.
-
-**Perfect for (v0.1.0 - Local-First):**
-- Todo applications (local storage)
-- Note-taking apps
-- Offline-first PWAs
-- Browser extensions
-- Electron apps with local storage
-- Apps planning to add server sync later (future-proof)
-
-**Future (v0.2.0+ with network sync):**
+**Perfect for (v0.1.0 - Full Network Sync):**
 - CRM systems with server sync
 - Project management with team collaboration
 - Dashboards syncing across devices
+- Real-time collaborative applications
+- Todo applications with cloud sync
+- Note-taking apps with cross-device sync
+- Offline-first PWAs with backend sync
 - E-commerce with cloud sync
 - **Any app that syncs structured data (JSON objects) with a server**
+
+**Future (v0.2.0+):**
+- Character-level collaborative text editing (Text CRDT)
+- Distributed counters (Counter CRDT)
+- Conflict-free sets (Set CRDT)
 
 **Real-world examples:**
 - [Todo App](../../examples/todo-app/) - Simple CRUD with filters
 - [Project Management App](../../examples/project-management/) - Kanban board with drag-and-drop
 - [Collaborative Editor](../../examples/collaborative-editor/) - Real-time document editing
 
-**Code example (v0.1.0 - Local-First):**
+**Code example (v0.1.0 - Network Sync):**
 ```typescript
 import { SyncKit } from '@synckit/sdk'
 
+// Enable network sync with serverUrl
 const sync = new SyncKit({
   storage: 'indexeddb',
-  name: 'my-app'
-  // serverUrl accepted but not used in v0.1.0
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080'  // ✅ Enables WebSocket sync
 })
 
 await sync.init()
@@ -98,48 +102,59 @@ await task.update({
 
 // ✅ Works: Local storage with IndexedDB
 // ✅ Works: Offline-first, instant writes
-// ✅ Works: Conflict resolution (if using multiple tabs)
-// ❌ v0.1.0: No server sync (coming in v0.2.0)
+// ✅ Works: Conflict resolution (automatic)
+// ✅ Works: Real-time sync to server (v0.1.0)
+// ✅ Works: Network status tracking
+// ✅ Works: Offline queue with auto-replay
+
+// Monitor network status
+const status = sync.getNetworkStatus()
+console.log('Connected:', status?.connectionState)
 ```
 
 **When to use:**
-- ✅ You might need server sync in the future (future-proof)
+- ✅ You need real-time network synchronization
+- ✅ You want cross-device sync
+- ✅ You need team collaboration features
+- ✅ You want offline queue with auto-replay
 - ✅ Data is structured (objects, arrays, primitives)
-- ✅ You want the latest features as they're added
-- ✅ 5 KB difference doesn't matter to you
 - ✅ **This is the recommended default for 95% of applications**
 
 **When NOT to use:**
-- ❌ You're 100% sure you'll never need server sync → Use Lite variant (save 5 KB)
+- ❌ You're 100% sure you'll never need server sync → Use Lite variant (save 13 KB)
 - ❌ Bundle size is absolutely critical → Use Lite variant
 
-**Bundle size:** 49 KB (WASM) + ~4 KB (SDK) = **~53 KB total**
+**Bundle size:** 48 KB (WASM) + 9 KB (JS) = **58 KB total gzipped**
 
 ---
 
-### Lite Variant - 44 KB gzipped (Smallest)
+### Lite Variant - 45 KB gzipped (Smallest)
 
 **Import:**
 ```typescript
 import { SyncKit } from '@synckit/sdk/lite'
 ```
 
-**SDK v0.1.0 Features (Same as Default in v0.1.0):**
+**SDK v0.1.0 Features (Local-Only):**
 - ✅ Document sync (Last-Write-Wins)
 - ✅ Vector clocks (causality tracking)
 - ✅ Conflict resolution (automatic)
 - ✅ Offline-first (local storage only)
 - ✅ IndexedDB & Memory storage
-- ❌ Network sync *(not in WASM, not in SDK)*
-- ❌ Text/Counter/Set *(not in WASM, not in SDK)*
+- ❌ **Network sync** *(not in WASM, not available)*
+- ❌ **WebSocket client** *(not in WASM)*
+- ❌ **Offline queue** *(not in WASM)*
+- ❌ Text/Counter/Set CRDTs *(not in WASM)*
 
 **WASM Binary Does NOT Include:**
 - ❌ Network protocol (Protocol Buffers)
+- ❌ WebSocket client
+- ❌ Offline queue management
 - ❌ Delta computation
 - ❌ DateTime serialization
 - ❌ Text/Counter/Set CRDT implementations
 
-**Note:** v0.1.0 Lite has the SAME features as Default - both are local-only. The only difference is bundle size (5 KB smaller) and future-proofing (Default will get network features in v0.2.0+, Lite won't).
+**Note:** Lite variant is LOCAL-ONLY. It does NOT include network sync capabilities. Use Default variant (58KB) if you need network synchronization.
 
 **Perfect for:**
 - Local-only applications
@@ -177,23 +192,24 @@ await todo.update({
 
 // ✅ Works: Local storage with IndexedDB
 // ✅ Works: Offline-first, instant writes
-// ✅ Same functionality as Default in v0.1.0
-// 💡 5 KB smaller than Default
+// ❌ NO network sync (use Default for that)
+// 💡 13 KB smaller than Default
 ```
 
 **When to use:**
 - ✅ You're 100% sure you'll never need server sync
 - ✅ Local-only storage is all you need
-- ✅ Want the absolute smallest bundle (5 KB matters)
+- ✅ Want the absolute smallest bundle
 - ✅ Building offline-first without backend
 
 **When NOT to use:**
-- ❌ You might need server sync someday → Use Default variant (future-proof)
-- ❌ Not sure about requirements → Use Default variant (only 5 KB larger)
+- ❌ You might need server sync → Use Default variant (has network in v0.1.0)
+- ❌ Not sure about requirements → Use Default variant (only 13 KB larger)
+- ❌ You need real-time collaboration → Use Default variant
 
-**Bundle size:** 44 KB (WASM) + ~4 KB (SDK) = **~48 KB total**
+**Bundle size:** 43 KB (WASM) + 1 KB (JS) = **45 KB total gzipped**
 
-**Bundle size savings:** 5 KB smaller than Default (10% reduction)
+**Bundle size savings:** 13 KB smaller than Default (22% reduction)
 
 ---
 
@@ -234,106 +250,96 @@ import { SyncKit, SyncDocument } from '@synckit/sdk'
 
 Understanding the size trade-offs:
 
-| Variant | WASM (gzipped) | SDK (gzipped) | Total | What You Get |
-|---------|----------------|---------------|-------|--------------|
-| Lite | 44 KB | ~4 KB | **~48 KB** | Local-only sync |
-| Default | 49 KB | ~4 KB | **~53 KB** | + Server sync (recommended) |
+| Variant | Total (gzipped) | WASM | JS | What You Get |
+|---------|-----------------|------|-----|--------------|
+| **Lite** | **45 KB** | 43 KB | 1 KB | Local-only sync |
+| **Default** | **58 KB** | 48 KB | 9 KB | + Network sync (v0.1.0) |
 
 **Key insights:**
-1. SDK overhead is minimal (~4 KB). WASM dominates bundle size.
-2. Lite to Default: +5 KB for network protocol support
-3. For most apps, the 5 KB is worth it for server sync capability
+1. Default variant JS includes WebSocket client, sync manager, and offline queue
+2. Lite to Default: +13 KB for full network sync capabilities
+3. For most apps, the 13 KB is worth it for real-time sync
 
 **Comparison to alternatives (gzipped):**
 
 | Library | Size | Type | Notes |
 |---------|------|------|-------|
 | **Yjs** | **~19 KB** | Pure JS | Text CRDT, lightest |
-| **SyncKit Lite** | **~48 KB** | WASM + JS | Local-only |
-| **SyncKit Default** | **~53 KB** | WASM + JS | Recommended |
+| **SyncKit Lite** | **~45 KB** | WASM + JS | Local-only |
+| **SyncKit Default** | **~58 KB** | WASM + JS | With network sync |
 | **Automerge** | **~60-78 KB** | WASM + JS | Full CRDT suite |
 | **Firebase SDK** | **~150 KB** | Pure JS | Plus server dependency |
 
 **SyncKit's Position:**
-- 2.8x larger than Yjs (trade-off: WASM portability for multi-language servers)
+- 3x larger than Yjs (trade-off: WASM portability + network sync)
 - Competitive with Automerge (similar size, simpler API for structured data)
-- 2.8x smaller than Firebase
+- 2.6x smaller than Firebase
 
 ---
 
 ## 🎓 Common Scenarios
 
-### Scenario 1: Todo Application (Local or Future Server Sync)
+### Scenario 1: Todo Application with Network Sync
 
 **Recommended:** Default variant
 
 **Why:**
 - Structured data (tasks, status, due dates)
-- Future-proof for server sync (v0.2.0+)
-- v0.1.0: Works great as local-first app
+- Real-time sync across devices
+- Network sync available NOW in v0.1.0
+- Team collaboration ready
 
-**Bundle:** ~53 KB (SyncKit) + ~130 KB (React) = ~183 KB total
+**Bundle:** ~58 KB (SyncKit) + ~130 KB (React) = ~188 KB total
 
-**Example:** [Todo App](../../examples/todo-app/) - Currently local-only, ready for server sync
-
----
-
-### Scenario 1b: Todo Application (Never Needs Server)
-
-**Recommended:** Lite variant (save 5 KB)
-
-**Why:**
-- Same features as Default in v0.1.0
-- 5 KB smaller if you're certain you won't need server sync
-
-**Bundle:** ~48 KB (SyncKit) + ~130 KB (React) = ~178 KB total
+**Example:** [Todo App](../../examples/todo-app/) - With network sync capabilities
 
 ---
 
 ### Scenario 2: Local-Only Todo Application
 
-**Recommended:** Lite variant
+**Recommended:** Lite variant (save 13 KB)
 
 **Why:**
-- No server needed
+- No server sync needed
 - Local storage only
 - Smallest bundle size
+- 13 KB smaller than Default
 
-**Bundle:** ~48 KB (SyncKit) + ~130 KB (React) = ~178 KB total
+**Bundle:** ~45 KB (SyncKit) + ~130 KB (React) = ~175 KB total
 
 ---
 
-### Scenario 3: Project Management (Kanban)
+### Scenario 3: Project Management (Kanban) with Team Sync
 
 **Recommended:** Default variant
 
 **Why:**
 - Cards are structured data (title, description, status)
-- Future team collaboration with server sync (v0.2.0+)
-- v0.1.0: Works as single-user local app
-- Future-proof for multi-user features
+- Team collaboration with real-time server sync
+- Network sync available NOW in v0.1.0
+- Multi-user features ready
 
-**Bundle:** ~53 KB (SyncKit) + ~130 KB (React) + ~28 KB (dnd-kit) = ~211 KB total
+**Bundle:** ~58 KB (SyncKit) + ~130 KB (React) + ~28 KB (dnd-kit) = ~216 KB total
 
-**Example:** [Project Management App](../../examples/project-management/) - Currently local-only
+**Example:** [Project Management App](../../examples/project-management/) - With network sync
 
 ---
 
-### Scenario 4: Collaborative Editor
+### Scenario 4: Collaborative Document Editing
 
 **Recommended:** Default variant
 
 **Why:**
 - Document-level sync for editor content
-- Future real-time collaboration (v0.2.0+)
-- v0.1.0: Single-user editor with local persistence
-- Future-proof for multi-user editing
+- Real-time collaboration available NOW in v0.1.0
+- Network sync with offline queue
+- Multi-user editing ready
 
-**Bundle:** ~53 KB (SyncKit) + ~130 KB (React) + ~124 KB (CodeMirror) = ~307 KB total
+**Bundle:** ~58 KB (SyncKit) + ~130 KB (React) + ~124 KB (CodeMirror) = ~312 KB total
 
-**Example:** [Collaborative Editor](../../examples/collaborative-editor/) - Currently local-only
+**Example:** [Collaborative Editor](../../examples/collaborative-editor/) - With network sync
 
-**Note:** v0.1.0 uses document-level sync (LWW), not character-level Text CRDT. True collaborative editing with character-level CRDTs is coming in v0.2.0.
+**Note:** v0.1.0 uses document-level sync (LWW), not character-level Text CRDT. Character-level CRDTs coming in v0.2.0.
 
 ---
 
@@ -347,7 +353,7 @@ Understanding the size trade-offs:
 - No server sync needed
 - Fastest performance
 
-**Bundle:** ~48 KB (smallest possible)
+**Bundle:** ~45 KB (smallest possible)
 
 ---
 
@@ -355,12 +361,13 @@ Understanding the size trade-offs:
 
 **Decision depends on sync needs:**
 
-**Use Default if:**
-- Need cloud sync across devices
+**Use Default (58KB) if:**
+- Need cloud sync across devices (v0.1.0 ready)
 - Multiple users collaborate
 - Data backup to server required
+- Real-time updates needed
 
-**Use Lite if:**
+**Use Lite (45KB) if:**
 - Local files only (no cloud sync)
 - Single user application
 - Want smallest bundle
@@ -378,26 +385,26 @@ import { SyncKit } from '@synckit/sdk'
 ```
 
 You only need to consider Lite if:
-- Bundle size is absolutely critical (saving 5 KB matters)
+- Bundle size is absolutely critical (saving 13 KB matters)
 - You're 100% sure you'll never need server sync
 
 ### 2. Don't Over-Optimize
 
 **Rule of thumb:**
 - If you're unsure → Use Default variant
-- 5 KB difference is negligible for most apps
-- Server sync is valuable even if you don't use it immediately
+- 13 KB difference is small for most apps
+- Server sync is available NOW in v0.1.0
 
 **Example of premature optimization:**
 ```typescript
-// ❌ BAD: Using Lite to save 5 KB, then realizing you need sync
+// ❌ BAD: Using Lite to save 13 KB, missing out on network sync
 import { SyncKit } from '@synckit/sdk/lite'
 // Later: "We need cross-device sync now..."
 // Now you have to refactor
 
-// ✅ GOOD: Use Default from the start
+// ✅ GOOD: Use Default with network sync ready
 import { SyncKit } from '@synckit/sdk'
-// Works offline, adds server sync later with zero code changes
+// serverUrl enables network sync in v0.1.0
 ```
 
 ### 3. Profile Your App
@@ -428,24 +435,26 @@ Use browser dev tools to measure actual bundle impact:
 
 ### Q: Which variant should most apps use?
 
-**A:** Default variant. It's only 5 KB larger than Lite and is future-proof for server sync (coming in v0.2.0+). In v0.1.0, both variants have the same features (local-only), but Default will get network sync when it's ready.
+**A:** Default variant. It's 13 KB larger than Lite but includes full network sync capabilities available NOW in v0.1.0. Default has real-time WebSocket sync, offline queue, and network status tracking ready to use.
 
 ### Q: What's missing from Lite?
 
-**A:** Lite's WASM binary excludes:
+**A:** Lite's WASM binary excludes network sync components:
 - Protocol Buffers (network protocol): ~3 KB
+- WebSocket client: ~5 KB
+- Offline queue management: ~3 KB
 - DateTime library (chrono): ~2 KB
 
-**Important:** In v0.1.0, BOTH variants are local-only. Default includes these in the WASM binary for future use, but the SDK doesn't expose them yet. They'll be used when network sync is added in v0.2.0+.
+**Important:** Lite is LOCAL-ONLY. Default has full network sync in v0.1.0.
 
-### Q: Will my bundle really be ~50 KB?
+### Q: Will my bundle really be ~45-58 KB?
 
 **A:** Yes:
-- Lite: ~48 KB total (WASM + SDK)
-- Default: ~53 KB total (WASM + SDK)
+- Lite: **45 KB total** (43KB WASM + 1KB JS)
+- Default: **58 KB total** (48KB WASM + 9KB JS)
 
 This is just SyncKit. Your total bundle includes:
-- SyncKit: ~48-53 KB
+- SyncKit: ~45-58 KB
 - React (if used): ~130 KB
 - Other libraries: varies
 - Your code: varies
@@ -472,16 +481,17 @@ This is just SyncKit. Your total bundle includes:
 
 ### Q: Why is the Collaborative Editor example using Default?
 
-**A:** In v0.1.0, the collaborative editor is actually a SINGLE-USER editor with local persistence (not truly collaborative yet). It uses document-level sync to store the content. True multi-user collaboration with character-level Text CRDT is coming in v0.2.0. Default variant is recommended because it's future-proof for when network sync is added.
+**A:** The collaborative editor uses Default variant because it has full network sync available NOW in v0.1.0. Multiple users can edit documents in real-time using document-level sync (LWW). Character-level Text CRDT is coming in v0.2.0 for even finer-grained collaboration.
 
-### Q: Is 5 KB really worth worrying about?
+### Q: Is 13 KB really worth worrying about?
 
-**A:** Usually no. For most web apps, 5 KB is negligible. Only optimize for this if:
+**A:** Usually no. For most web apps, 13 KB is small. Only use Lite if:
 - You're building a browser extension (strict size limits)
 - You're targeting low-end devices with slow networks
+- You're 100% certain you'll never need server sync
 - Your total bundle is already very large
 
-Otherwise, use Default and get server sync capability.
+Otherwise, use Default and get network sync capabilities (available NOW in v0.1.0).
 
 ---
 
@@ -535,8 +545,10 @@ Ready to build? Here's what to do next:
 ```typescript
 import { SyncKit } from '@synckit/sdk'
 ```
-- 49 KB gzipped WASM
-- Includes server sync, protocol support
+- 58 KB gzipped total (48KB WASM + 9KB JS)
+- Includes network sync (available NOW in v0.1.0)
+- WebSocket client with auto-reconnection
+- Offline queue with persistent storage
 - Perfect for 95% of applications
 - Use this unless you have a specific reason not to
 
@@ -544,9 +556,9 @@ import { SyncKit } from '@synckit/sdk'
 ```typescript
 import { SyncKit } from '@synckit/sdk/lite'
 ```
-- 44 KB gzipped WASM
+- 45 KB gzipped total (43KB WASM + 1KB JS)
 - Local-only, no server sync
-- 5 KB smaller than Default
+- 13 KB smaller than Default
 - Use for offline-first apps without backend
 
 ### Decision Matrix
@@ -557,4 +569,4 @@ import { SyncKit } from '@synckit/sdk/lite'
 | No, never | Lite |
 | Unsure | Default |
 
-**When in doubt, choose Default.** The 5 KB difference is worth the flexibility.
+**When in doubt, choose Default.** The 13 KB difference is worth it for network sync (available NOW in v0.1.0).
