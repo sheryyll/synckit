@@ -128,9 +128,9 @@ const syncState = synckit.getSyncState('my-document')
 
 if (syncState) {
   console.log('Sync state:', syncState.state)               // 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
-  console.log('Pending operations:', syncState.pendingOps)
+  console.log('Pending operations:', syncState.pendingOperations)
   console.log('Last synced:', syncState.lastSyncedAt)       // timestamp or null
-  console.log('Error:', syncState.error)                    // Error or null
+  console.log('Error:', syncState.error)                    // string or null
 }
 ```
 
@@ -144,9 +144,9 @@ if (syncState) {
 interface DocumentSyncState {
   documentId: string
   state: 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
-  pendingOps: number
+  pendingOperations: number
   lastSyncedAt: number | null
-  error: Error | null
+  error: string | null
 }
 ```
 
@@ -163,7 +163,7 @@ const unsubscribe = synckit.onSyncStateChange('my-document', (state) => {
   }
 
   if (state.state === 'error' && state.error) {
-    console.error('Sync error:', state.error.message)
+    console.error('Sync error:', state.error)
   }
 })
 
@@ -236,11 +236,11 @@ function DocumentStatus({ documentId }: { documentId: string }) {
   return (
     <div>
       <span>Status: {syncState.state}</span>
-      {syncState.pendingOps > 0 && (
-        <span>Pending: {syncState.pendingOps}</span>
+      {syncState.pendingOperations > 0 && (
+        <span>Pending: {syncState.pendingOperations}</span>
       )}
       {syncState.error && (
-        <span>Error: {syncState.error.message}</span>
+        <span>Error: {syncState.error}</span>
       )}
     </div>
   )
@@ -287,7 +287,7 @@ function TodoList() {
       </ul>
 
       {syncState?.error && (
-        <div>Sync error: {syncState.error.message}</div>
+        <div>Sync error: {syncState.error}</div>
       )}
     </div>
   )
@@ -298,7 +298,11 @@ function TodoList() {
 ```typescript
 {
   data: T                           // Document data
-  setters: Setters<T>              // Field setters
+  setters: {                        // Field setters
+    set: <K extends keyof T>(field: K, value: T[K]) => Promise<void>
+    update: (updates: Partial<T>) => Promise<void>
+    delete: <K extends keyof T>(field: K) => Promise<void>
+  }
   document: SyncDocument<T>        // Document instance
   syncState: DocumentSyncState | null  // Sync state
 }
@@ -311,21 +315,19 @@ function TodoList() {
 Custom error class for network-related errors:
 
 ```typescript
-class NetworkError extends Error {
-  code: string
-
-  constructor(message: string, code: string) {
-    super(message)
-    this.code = code
+class NetworkError extends SyncKitError {
+  constructor(message: string) {
+    super(message, 'NETWORK_ERROR')
+    this.name = 'NetworkError'
   }
 }
 ```
 
-**Error Codes:**
-- `NETWORK_UNAVAILABLE` - No network connection
+NetworkError always has the code `'NETWORK_ERROR'`. For more specific WebSocket-related errors, see `WebSocketErrorCode` enum which includes:
 - `CONNECTION_FAILED` - Failed to connect to server
 - `AUTH_FAILED` - Authentication failed
-- `SYNC_FAILED` - Synchronization failed
+- `SEND_FAILED` - Failed to send message
+- `INVALID_MESSAGE` - Received invalid message
 - `QUEUE_FULL` - Offline queue exceeded max size
 
 ### VectorClock
@@ -333,7 +335,9 @@ class NetworkError extends Error {
 Type for vector clocks used in conflict resolution:
 
 ```typescript
-type VectorClock = Record<string, number>
+interface VectorClock {
+  [clientId: string]: number
+}
 
 // Example:
 const clock: VectorClock = {
@@ -351,7 +355,7 @@ Type for sync operations:
 interface Operation {
   type: 'set' | 'delete'
   documentId: string
-  field: string
+  field?: string
   value?: unknown
   clock: VectorClock
   clientId: string
@@ -384,11 +388,7 @@ Handle document sync errors:
 ```typescript
 const unsubscribe = synckit.onSyncStateChange('doc-id', (state) => {
   if (state.state === 'error' && state.error) {
-    if (state.error instanceof NetworkError) {
-      console.error('Network error:', state.error.code, state.error.message)
-    } else {
-      console.error('Sync error:', state.error.message)
-    }
+    console.error('Sync error:', state.error)
   }
 })
 ```
