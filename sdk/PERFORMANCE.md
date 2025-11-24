@@ -95,7 +95,7 @@ All sizes are **gzipped** for fair comparison:
 
 ## Test Coverage
 
-- **Total tests**: 89 (85 passing, 95.5% pass rate)
+- **Total tests**: 100 (91 passing, 91% pass rate)
 - **Unit tests**: 82/82 passing ✅
 - **Integration tests**: 3/7 passing
 - **Performance tests**: 6/11 passing
