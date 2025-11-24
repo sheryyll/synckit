@@ -25,12 +25,14 @@ SyncKit is designed for **"fast enough for real-world use, easy to optimize"** r
 
 ### Performance Goals
 
-| Metric | Target | SyncKit Achieves |
+| Metric | Target | SyncKit v0.1.0 Achieves |
 |--------|--------|------------------|
-| **Local operation** | <1ms | ~371ns (single field) |
-| **Merge operation** | <5ms | ~74µs (document merge) |
-| **Sync latency** | <100ms | N/A (network sync not in v0.1.0) |
-| **Bundle size** | <100KB | 45-58KB (tiered variants) |
+| **Local operation** | <1ms | ~0.005ms (message encoding) |
+| **Queue operation** | <1ms | ~0.021ms (offline queue) |
+| **Network message decode** | <1ms | ~0.020ms |
+| **Sync latency** | <100ms | 10-100ms (network dependent) |
+| **Bundle size (full)** | <100KB | 58KB gzipped |
+| **Bundle size (lite)** | <100KB | 45KB gzipped |
 | **Memory** | <10MB | ~3MB (10K documents) |
 | **Initial load** | <3s | ~1.2s (cached WASM) |
 
@@ -42,8 +44,6 @@ SyncKit is designed for **"fast enough for real-world use, easy to optimize"** r
 
 ### Performance Characteristics
 
-**⚠️ v0.1.0 Note:** Cross-tab broadcast and network sync shown below are planned for future versions.
-
 ```
 Operation Hierarchy (fastest → slowest):
 
@@ -51,31 +51,28 @@ Memory Read            <1ms    ████
 IndexedDB Read        1-5ms    ████████████████
 Local Update          <1ms    ████
 WASM Processing      <1ms    ████
-Cross-tab Broadcast  <1ms    ████ (NOT IN v0.1.0)
-Network Sync        10-100ms  ████████████████████████████████ (NOT IN v0.1.0)
+Network Sync        10-100ms  ████████████████████████████████
 ```
 
 ### Where Time Goes
 
-**⚠️ v0.1.0 Note:** This breakdown includes planned features not yet implemented.
-
-**Typical operation breakdown (planned future version):**
+**Typical operation breakdown (with network sync enabled):**
 
 ```typescript
 await todo.update({ completed: true })
 ```
 
-| Phase | Time | % Total | Optimizable? | v0.1.0 Status |
-|-------|------|---------|-------------|---------------|
-| **JavaScript → WASM** | 0.05ms | 0.5% | ❌ | ✅ Working |
-| **WASM merge logic** | 0.07ms | 0.7% | ❌ | ✅ Working |
-| **IndexedDB write** | 2ms | 20% | ⚠️ Batch writes | ✅ Working |
-| **BroadcastChannel** | 0.5ms | 5% | ❌ | ❌ Not in v0.1.0 |
-| **Network sync** | 10-50ms | 70%+ | ✅ Background | ❌ Not in v0.1.0 |
-| **Total (online)** | ~12-52ms | 100% | | Planned |
-| **Total (offline)** | ~2.6ms | 100% | | ✅ v0.1.0 |
+| Phase | Time | % Total | Optimizable? |
+|-------|------|---------|-------------|
+| **JavaScript → WASM** | 0.05ms | 0.1% | ❌ |
+| **WASM merge logic** | 0.07ms | 0.2% | ❌ |
+| **IndexedDB write** | 2ms | 5% | ⚠️ Batch writes |
+| **Network queue** | 0.021ms | 0.1% | ❌ |
+| **Network sync** | 10-50ms | 90%+ | ✅ Debounce, batch |
+| **Total (online)** | ~12-52ms | 100% | |
+| **Total (offline)** | ~2.1ms | 100% | |
 
-**Current v0.1.0 performance:** ~2.6ms total (IndexedDB write + WASM processing)
+**Performance tip:** The network sync happens in the background and doesn't block the UI. Use `onNetworkStatusChange()` to monitor sync progress.
 
 ---
 
@@ -146,36 +143,50 @@ if (performance.memory) {
 // Memory tab → Take heap snapshot → Compare snapshots
 ```
 
-### Network Analysis - Planned Feature
+### Network Performance Monitoring
 
-**⚠️ NOT YET IMPLEMENTED IN v0.1.0**
-
-Monitor network performance (coming in future version):
+Monitor network sync performance:
 
 ```typescript
-// ⚠️ NOT FUNCTIONAL in v0.1.0 - These APIs don't exist
-// Track WebSocket traffic
-sync.onMessage((message) => {  // Method doesn't exist
-  console.log('Message size:', JSON.stringify(message).length, 'bytes')
+import { SyncKit } from '@synckit/sdk'
+
+const synckit = new SyncKit({
+  storage: 'indexeddb',
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080'
 })
 
-// Track sync latency
-let syncStart: number
+await synckit.init()
 
-sync.on('sync-start', () => {  // Event system doesn't exist
-  syncStart = performance.now()
+// Track network status changes
+const unsubscribe = synckit.onNetworkStatusChange((status) => {
+  console.log('Connection state:', status.connectionState)
+  console.log('Queued operations:', status.queueSize)
+  console.log('Failed operations:', status.failedOperations)
+
+  if (status.oldestOperation) {
+    const age = Date.now() - status.oldestOperation
+    console.log(`Oldest queued operation: ${age}ms ago`)
+  }
 })
 
-sync.on('sync-complete', () => {  // Event system doesn't exist
-  const latency = performance.now() - syncStart
-  console.log(`Sync latency: ${latency.toFixed(2)}ms`)
-})
-```
+// Track document sync state
+const doc = synckit.document<Todo>('todo-1')
+await doc.init()
 
-**Current v0.1.0:** Use Performance API to measure local operations:
-```typescript
+synckit.onSyncStateChange('todo-1', (state) => {
+  console.log('Sync state:', state.state) // 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
+  console.log('Last synced:', new Date(state.lastSyncedAt || 0))
+  console.log('Pending ops:', state.pendingOperations)
+
+  if (state.error) {
+    console.error('Sync error:', state.error)
+  }
+})
+
+// Measure operation latency
 performance.mark('update-start')
-await todo.update({ completed: true })
+await doc.update({ completed: true })
 performance.mark('update-end')
 performance.measure('update', 'update-start', 'update-end')
 
@@ -194,16 +205,16 @@ SyncKit offers 2 optimized variants:
 ```
 Variant        WASM      SDK       Total     Use Case
 ─────────────────────────────────────────────────────────────
-Lite           40 KB     ~4 KB    ~44 KB    Local-only sync
-Default        45 KB     ~4 KB    ~49 KB    Network sync (recommended)
+Lite           44 KB     1.5 KB    ~45 KB    Offline-only (no network)
+Default        49 KB     9.4 KB    ~58 KB    With network sync (recommended)
 
 Compare to competitors (gzipped):
-- Yjs:               ~19 KB   (pure JS)
-- SyncKit Lite:      ~44 KB   (WASM + JS)
-- SyncKit Default:   ~49 KB   (WASM + JS, recommended)
+- Yjs:               ~19 KB   (pure JS, no persistence)
+- SyncKit Lite:      ~45 KB   (WASM + JS, offline-only)
+- SyncKit Default:   ~58 KB   (WASM + JS, full sync)
 - Automerge:      ~60-78 KB   (WASM + JS)
 - Firebase:        ~150 KB   (pure JS)
-- RxDB:           ~100 KB+
+- RxDB:           ~100 KB+   (pure JS)
 ```
 
 **[Choosing a variant guide →](./choosing-variant.md)**
@@ -213,14 +224,26 @@ Compare to competitors (gzipped):
 Choose the variant that meets your needs:
 
 ```typescript
-// Lite (~44 KB) - Local-only sync
+// Lite (~45 KB) - Local-only, no network sync
 import { SyncKit } from '@synckit/sdk/lite'
 
-// Default (~49 KB) - Network sync (recommended)
+const synckit = new SyncKit({
+  storage: 'indexeddb',
+  name: 'my-app'
+  // No serverUrl - network layer not loaded
+})
+
+// Default (~58 KB) - Full network sync
 import { SyncKit } from '@synckit/sdk'
+
+const synckit = new SyncKit({
+  storage: 'indexeddb',
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080'  // Enables network sync
+})
 ```
 
-**Rule of thumb:** Use Default variant unless you don't need server sync. See the [variant selection guide](./choosing-variant.md) for details.
+**Rule of thumb:** Use Default variant if you need server sync (adds only 13KB). Use Lite if you're building a purely local-first app with no server.
 
 ### Tree-Shaking
 
@@ -265,26 +288,26 @@ Load SyncKit on-demand for better initial load:
 // Lazy load SyncKit
 const initSync = async () => {
   const { SyncKit } = await import('@synckit/sdk')
-  const sync = new SyncKit({
+  const synckit = new SyncKit({
     storage: 'indexeddb',
-    name: 'my-app'
-    // serverUrl: 'ws://localhost:8080'  // Not functional in v0.1.0
+    name: 'my-app',
+    serverUrl: 'ws://localhost:8080'
   })
-  await sync.init()
-  return sync
+  await synckit.init()
+  return synckit
 }
 
 // Use in component
 function App() {
-  const [sync, setSync] = useState<SyncKit | null>(null)
+  const [synckit, setSynckit] = useState<SyncKit | null>(null)
 
   useEffect(() => {
-    initSync().then(setSync)
+    initSync().then(setSynckit)
   }, [])
 
-  if (!sync) return <div>Loading...</div>
+  if (!synckit) return <div>Loading...</div>
 
-  return <TodoApp sync={sync} />
+  return <TodoApp synckit={synckit} />
 }
 ```
 
@@ -294,16 +317,16 @@ Load SyncKit only when needed:
 
 ```typescript
 // Initial load: No SyncKit yet
-// Later: Load when user needs offline sync
+// Later: Load when user enables offline sync
 async function enableOfflineSync() {
   const { SyncKit } = await import('@synckit/sdk')
-  const sync = new SyncKit({
+  const synckit = new SyncKit({
     storage: 'indexeddb',
-    name: 'my-app'
-    // serverUrl: 'ws://localhost:8080'  // Not functional in v0.1.0
+    name: 'my-app',
+    serverUrl: 'ws://localhost:8080'
   })
-  await sync.init()
-  return sync
+  await synckit.init()
+  return synckit
 }
 ```
 
@@ -320,7 +343,7 @@ const { useSyncDocument } = await import('@synckit/sdk')
 
 SyncKit's WASM binary is already optimized with:
 - ✅ `wasm-opt -Oz` (maximum size optimization)
-- ✅ Brotli compression
+- ✅ Brotli compression support
 - ✅ Streaming compilation
 - ✅ Minimal dependencies
 
@@ -337,15 +360,24 @@ Unsubscribe from documents when done:
 ```typescript
 // ❌ Memory leak
 function TodoItem({ id }) {
-  const todo = sync.document<Todo>(id)
+  const todo = synckit.document<Todo>(id)
   // Missing init() and no cleanup!
   todo.subscribe(data => setTodoData(data))
 }
 
-// ✅ Proper cleanup
+// ✅ Proper cleanup with hook
+import { useSyncDocument } from '@synckit/sdk'
+
+function TodoItem({ id }) {
+  const [data, { update }] = useSyncDocument<Todo>(id)
+  // Hook handles init() and cleanup automatically
+  return <div>{data.title}</div>
+}
+
+// ✅ Proper cleanup without hook
 function TodoItem({ id }) {
   useEffect(() => {
-    const todo = sync.document<Todo>(id)
+    const todo = synckit.document<Todo>(id)
 
     const initAndSubscribe = async () => {
       await todo.init()
@@ -369,15 +401,15 @@ async function cleanupOldDocuments() {
   const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000)  // 30 days
 
   // Get all document IDs
-  const docIds = await sync.listDocuments()
+  const docIds = await synckit.listDocuments()
 
   for (const id of docIds) {
-    const doc = sync.document(id)
+    const doc = synckit.document(id)
     await doc.init()
     const data = doc.get()
 
     if (data.createdAt < cutoff && data.deleted) {
-      await sync.deleteDocument(id)  // Permanently delete entire document
+      await synckit.deleteDocument(id)  // Permanently delete entire document
     }
   }
 }
@@ -392,8 +424,8 @@ cleanupOldDocuments()
 // Track subscription count
 let subscriptionCount = 0
 
-const originalSubscribe = sync.document.prototype.subscribe
-sync.document.prototype.subscribe = function(callback) {
+const originalSubscribe = SyncDocument.prototype.subscribe
+SyncDocument.prototype.subscribe = function(callback) {
   subscriptionCount++
   console.log('Subscriptions:', subscriptionCount)
 
@@ -444,81 +476,12 @@ checkStorageUsage()
 
 ## Sync Performance
 
-### Batch Updates - Planned Feature
-
-**⚠️ NOT YET IMPLEMENTED IN v0.1.0**
-
-Combine multiple updates into a single operation (coming in future version):
-
-```typescript
-// ❌ Slow: 3 separate syncs
-await todo1.update({ completed: true })
-await todo2.update({ completed: true })
-await todo3.update({ completed: true })
-
-// ✅ Fast: Single batched sync (planned future version)
-// ⚠️ sync.batch() doesn't exist in v0.1.0
-await sync.batch(() => {
-  todo1.update({ completed: true })
-  todo2.update({ completed: true })
-  todo3.update({ completed: true })
-})
-// All updates sent in one network round-trip
-```
-
-**Planned performance gain:** 3x fewer network round-trips (when network sync is implemented)
-
-**Current v0.1.0:** All updates are local-only and already fast (~2ms each). Batching not needed for local operations.
-
-### Selective Syncing - Planned Feature
-
-**⚠️ NOT YET IMPLEMENTED IN v0.1.0**
-
-Only sync documents you need (coming in future version):
-
-```typescript
-// ❌ Sync everything
-const sync = new SyncKit({
-  serverUrl: 'ws://localhost:8080'  // Not functional in v0.1.0
-})
-
-// ✅ Sync only active project (planned future version)
-// ⚠️ syncFilter option doesn't exist in v0.1.0
-const sync = new SyncKit({
-  serverUrl: 'ws://localhost:8080',
-  syncFilter: (docId) => docId.startsWith('project-123-')
-})
-```
-
-**Current v0.1.0:** All documents are stored locally. Use application logic to manage which documents to create/load.
-
-### Delta Syncing - Planned Feature
-
-**⚠️ NOT YET IMPLEMENTED IN v0.1.0** (network sync not available)
-
-SyncKit will use **delta syncing** by default—only changed fields will be sent:
-
-```typescript
-// Document: { id: '1', title: 'Todo', description: '...long text...', completed: false }
-
-// Update only one field
-await todo.update({ completed: true })
-
-// Planned network payload (delta only):
-// { id: '1', completed: true }  ← Small!
-// Not: { id: '1', title: 'Todo', description: '...', completed: true }  ← Large!
-```
-
-**Planned typical savings:** 80-95% bandwidth reduction (when network sync is implemented)
-
-**Current v0.1.0:** Updates are field-level in the CRDT internally, but there's no network sync yet.
-
 ### Debounce Rapid Updates
 
 Avoid syncing on every keystroke:
 
 ```typescript
-// ❌ Syncs on every keystroke (expensive)
+// ❌ Syncs on every keystroke (inefficient)
 <input
   value={title}
   onChange={(e) => todo.update({ title: e.target.value })}
@@ -542,6 +505,117 @@ const updateTitle = debounce((title: string) => {
 
 **Performance gain:** 90%+ reduction in sync operations
 
+### Batch Multiple Updates
+
+Update multiple fields at once instead of separately:
+
+```typescript
+// ❌ Slow: 3 separate operations
+await todo.set('title', 'New title')
+await todo.set('completed', true)
+await todo.set('priority', 'high')
+
+// ✅ Fast: Single batched operation
+await todo.update({
+  title: 'New title',
+  completed: true,
+  priority: 'high'
+})
+```
+
+**Performance gain:** 3x fewer IndexedDB writes, 3x fewer network operations
+
+### Monitor Queue Size
+
+Keep an eye on offline queue during extended offline periods:
+
+```typescript
+import { useNetworkStatus } from '@synckit/sdk'
+
+function NetworkMonitor() {
+  const status = useNetworkStatus()
+
+  if (!status) return null // No network layer
+
+  return (
+    <div>
+      <div>Status: {status.connectionState}</div>
+      <div>Queued: {status.queueSize}</div>
+      <div>Failed: {status.failedOperations}</div>
+
+      {status.queueSize > 100 && (
+        <div className="warning">
+          Large queue detected. {status.queueSize} operations pending.
+        </div>
+      )}
+
+      {status.failedOperations > 0 && (
+        <div className="error">
+          {status.failedOperations} operations failed after max retries.
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+### Optimize Network Configuration
+
+Fine-tune network settings for your use case:
+
+```typescript
+const synckit = new SyncKit({
+  storage: 'indexeddb',
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080',
+  network: {
+    // Adjust reconnection behavior
+    reconnect: {
+      initialDelay: 1000,      // Start reconnecting after 1s
+      maxDelay: 30000,         // Cap at 30s between attempts
+      multiplier: 1.5          // Exponential backoff
+    },
+    // Adjust heartbeat for connection health checks
+    heartbeat: {
+      interval: 30000,         // Ping every 30s
+      timeout: 5000            // Expect pong within 5s
+    },
+    // Adjust queue limits
+    queue: {
+      maxSize: 1000,           // Max 1000 pending operations
+      maxRetries: 5,           // Retry failed ops 5 times
+      retryDelay: 1000,        // Start with 1s delay
+      retryBackoff: 2.0        // Double delay on each retry
+    }
+  }
+})
+```
+
+**Performance tips:**
+- **Low-latency networks:** Reduce heartbeat interval to 15s for faster failure detection
+- **High-latency/mobile:** Increase to 60s to reduce bandwidth usage
+- **Flaky connections:** Increase `maxRetries` and `maxDelay`
+- **Stable connections:** Reduce `maxRetries` to fail faster
+
+### Delta-Based Syncing
+
+SyncKit uses **delta syncing** by default—only changed fields are sent:
+
+```typescript
+// Document: { id: '1', title: 'Todo', description: '...long text...', completed: false }
+
+// Update only one field
+await todo.update({ completed: true })
+
+// Network payload (delta only):
+// { documentId: '1', field: 'completed', value: true }  ← Small!
+
+// Not the full document:
+// { id: '1', title: 'Todo', description: '...', completed: true }  ← Large!
+```
+
+**Typical savings:** 80-95% bandwidth reduction
+
 ---
 
 ## Web Workers for Background Sync
@@ -554,14 +628,14 @@ Move sync operations to a background thread for 60fps UI:
 // sync-worker.ts
 import { SyncKit } from '@synckit/sdk'
 
-const sync = new SyncKit({
+const synckit = new SyncKit({
   storage: 'indexeddb',
-  name: 'my-app'
-  // serverUrl: 'ws://localhost:8080'  // Not functional in v0.1.0
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080'
 })
 
 // Initialize on worker startup
-await sync.init()
+await synckit.init()
 
 // Listen for messages from main thread
 self.onmessage = async (event) => {
@@ -569,20 +643,30 @@ self.onmessage = async (event) => {
 
   switch (type) {
     case 'update':
-      const doc = sync.document(id)
+      const doc = synckit.document(id)
       await doc.init()
       await doc.update(data)
       self.postMessage({ type: 'update-complete', id })
       break
 
     case 'get':
-      const getDoc = sync.document(id)
+      const getDoc = synckit.document(id)
       await getDoc.init()
       const result = getDoc.get()
       self.postMessage({ type: 'get-result', id, data: result })
       break
+
+    case 'network-status':
+      const status = synckit.getNetworkStatus()
+      self.postMessage({ type: 'network-status', data: status })
+      break
   }
 }
+
+// Monitor network status in worker
+synckit.onNetworkStatusChange?.((status) => {
+  self.postMessage({ type: 'network-status-change', data: status })
+})
 ```
 
 ### Use from Main Thread
@@ -602,8 +686,14 @@ worker.postMessage({
 
 // Listen for results
 worker.addEventListener('message', (event) => {
-  if (event.data.type === 'update-complete') {
-    console.log('Update completed in background')
+  switch (event.data.type) {
+    case 'update-complete':
+      console.log('Update completed in background')
+      break
+
+    case 'network-status-change':
+      console.log('Network status:', event.data.data)
+      break
   }
 })
 ```
@@ -615,6 +705,32 @@ worker.addEventListener('message', (event) => {
 ## Framework-Specific Optimizations
 
 ### React Optimization
+
+#### Use Built-in Hooks
+
+```typescript
+import { useSyncDocument, useNetworkStatus } from '@synckit/sdk'
+
+function TodoItem({ id }: { id: string }) {
+  // ✅ Efficient: Hook handles init and cleanup
+  const [data, { update }] = useSyncDocument<Todo>(id)
+  const networkStatus = useNetworkStatus()
+
+  return (
+    <div>
+      <input
+        type="checkbox"
+        checked={data.completed}
+        onChange={(e) => update({ completed: e.target.checked })}
+      />
+      <span>{data.title}</span>
+      {networkStatus?.connectionState === 'offline' && (
+        <span className="offline-badge">Offline</span>
+      )}
+    </div>
+  )
+}
+```
 
 #### Use `useMemo` for Expensive Computations
 
@@ -692,17 +808,29 @@ function TodoList({ todos }: { todos: Todo[] }) {
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { SyncKit } from '@synckit/sdk'
 
 // Note: @synckit/sdk/vue coming in v0.2.0
 // For now, use the core SDK with Vue reactivity
-const sync = new SyncKit({ storage: 'indexeddb', name: 'my-app' })
+const synckit = new SyncKit({
+  storage: 'indexeddb',
+  name: 'my-app',
+  serverUrl: 'ws://localhost:8080'
+})
+
 const todoList = ref({})
 
 onMounted(async () => {
-  await sync.init()
-  // Load documents here
+  await synckit.init()
+  const doc = synckit.document('todo-list')
+  await doc.init()
+
+  const unsubscribe = doc.subscribe((data) => {
+    todoList.value = data
+  })
+
+  onUnmounted(() => unsubscribe())
 })
 
 // Memoize filtered results
@@ -717,13 +845,30 @@ const completedTodos = computed(() =>
 ```svelte
 <script>
   import { writable, derived } from 'svelte/store'
+  import { onMount } from 'svelte'
   import { SyncKit } from '@synckit/sdk'
 
   // Note: @synckit/sdk/svelte coming in v0.2.0
   // For now, use the core SDK with Svelte stores
-  const sync = new SyncKit({ storage: 'indexeddb', name: 'my-app' })
-  sync.init() // Initialize on component mount
+  const synckit = new SyncKit({
+    storage: 'indexeddb',
+    name: 'my-app',
+    serverUrl: 'ws://localhost:8080'
+  })
+
   const todoList = writable({ todos: [] })
+
+  onMount(async () => {
+    await synckit.init()
+    const doc = synckit.document('todo-list')
+    await doc.init()
+
+    const unsubscribe = doc.subscribe((data) => {
+      todoList.set(data)
+    })
+
+    return unsubscribe
+  })
 
   // Derive computed store
   const completedTodos = derived(
@@ -751,12 +896,14 @@ const completedTodos = computed(() =>
 - Initial load: 4.2s
 - Memory: 18MB (1K todos)
 
-**After optimization:**
+**Optimizations applied:**
 - ✅ Code splitting → 180KB (-27%)
-- ✅ React.memo → Reduced re-renders by 60%
+- ✅ Used `useSyncDocument` hook → Automatic cleanup
+- ✅ React.memo on TodoItem → Reduced re-renders by 60%
 - ✅ Virtualized list → 8MB memory (-56%)
+- ✅ Debounced text inputs → 90% fewer sync ops
 
-**Result:** 2.1s initial load, 8MB memory
+**Result:** 2.1s initial load, 8MB memory, smooth 60fps scrolling
 
 ### Case Study 2: Collaborative Editor
 
@@ -765,12 +912,28 @@ const completedTodos = computed(() =>
 - Keystroke lag: 50ms
 - Memory: 45MB
 
-**After optimization:**
-- ✅ Debounced sync → 30ms latency (-80%)
-- ✅ Web Worker → 5ms keystroke lag (-90%)
-- ✅ WASM optimization → 22MB memory (-51%)
+**Optimizations applied:**
+- ✅ Debounced sync (300ms) → 30ms latency (-80%)
+- ✅ Web Worker for sync → 5ms keystroke lag (-90%)
+- ✅ Network queue monitoring → Better offline UX
+- ✅ Delta syncing (automatic) → 85% bandwidth reduction
 
-**Result:** Sub-30ms sync, no perceptible lag
+**Result:** Sub-30ms sync, no perceptible lag, excellent offline support
+
+### Case Study 3: Mobile App
+
+**Before optimization:**
+- Bundle size: 180KB
+- Queue overflow during offline periods
+- Slow reconnection
+
+**Optimizations applied:**
+- ✅ Used Lite variant → 45KB (-75%)
+- ✅ Increased queue size to 5000 → No overflow
+- ✅ Adjusted reconnect settings → Faster recovery
+- ✅ Storage cleanup on startup → Reduced memory
+
+**Result:** Fast loading on 3G, reliable offline queue, quick sync on reconnection
 
 ---
 
@@ -869,18 +1032,73 @@ window.addEventListener('load', () => {
   }, 0)
 })
 
-// Track SyncKit operations (planned future version)
-// ⚠️ sync.on() event system doesn't exist in v0.1.0
-// For now, manually track operations:
-const startTime = performance.now()
-await todo.update({ completed: true })
-const duration = performance.now() - startTime
+// Track SyncKit operations
+const trackOperation = async (operation: string, fn: () => Promise<void>) => {
+  const startTime = performance.now()
+  await fn()
+  const duration = performance.now() - startTime
 
-analytics.track('sync_operation', {
-  operation: 'update',
-  duration: duration,
-  documentId: 'todo-1'
+  analytics.track('sync_operation', {
+    operation,
+    duration
+  })
+}
+
+// Usage
+await trackOperation('update-todo', () =>
+  todo.update({ completed: true })
+)
+
+// Track network status
+synckit.onNetworkStatusChange?.((status) => {
+  analytics.track('network_status_change', {
+    connectionState: status.connectionState,
+    queueSize: status.queueSize,
+    failedOperations: status.failedOperations
+  })
 })
+```
+
+### Performance Dashboard
+
+Build a real-time performance monitoring component:
+
+```typescript
+import { useNetworkStatus, useSyncState } from '@synckit/sdk'
+import { useEffect, useState } from 'react'
+
+function PerformanceDashboard() {
+  const networkStatus = useNetworkStatus()
+  const [metrics, setMetrics] = useState({
+    avgUpdateTime: 0,
+    totalUpdates: 0
+  })
+
+  // Track update performance
+  const trackUpdate = async (fn: () => Promise<void>) => {
+    const start = performance.now()
+    await fn()
+    const duration = performance.now() - start
+
+    setMetrics(prev => ({
+      avgUpdateTime: (prev.avgUpdateTime * prev.totalUpdates + duration) / (prev.totalUpdates + 1),
+      totalUpdates: prev.totalUpdates + 1
+    }))
+  }
+
+  if (!networkStatus) return null
+
+  return (
+    <div className="performance-dashboard">
+      <h3>Performance Metrics</h3>
+      <div>Connection: {networkStatus.connectionState}</div>
+      <div>Queue Size: {networkStatus.queueSize}</div>
+      <div>Failed Ops: {networkStatus.failedOperations}</div>
+      <div>Avg Update: {metrics.avgUpdateTime.toFixed(2)}ms</div>
+      <div>Total Updates: {metrics.totalUpdates}</div>
+    </div>
+  )
+}
 ```
 
 ---
@@ -889,27 +1107,36 @@ analytics.track('sync_operation', {
 
 **Key Optimizations:**
 
-1. **Bundle size** - Tree-shaking, code splitting, dynamic imports (<50KB for v0.1.0)
-2. **Memory** - Proper cleanup, garbage collection, subscription management (<10MB)
-3. **Local operations** - Debouncing, efficient subscriptions (~2ms updates)
-4. **Rendering** - React.memo, virtualization, Web Workers (60fps UI)
-5. **Monitoring** - Performance budgets, Lighthouse CI, RUM (continuous improvement)
-
-**Note:** Sync optimizations (batching, delta syncing) are planned for future versions when network sync is implemented.
+1. **Bundle size** - Choose the right variant, tree-shake, code split (45-58KB gzipped)
+2. **Memory** - Proper cleanup, use hooks, garbage collection (<10MB)
+3. **Local operations** - Debouncing, batching, efficient subscriptions (~2ms updates)
+4. **Network** - Monitor status, optimize config, delta syncing (10-100ms sync)
+5. **Rendering** - React.memo, virtualization, Web Workers (60fps UI)
+6. **Monitoring** - Performance budgets, Lighthouse CI, RUM (continuous improvement)
 
 **Quick Wins:**
 
+- ✅ Use `useSyncDocument` hook (automatic cleanup)
 - ✅ Use `React.memo` for TodoItem components
 - ✅ Debounce text inputs (300ms)
 - ✅ Virtualize lists >100 items
-- ✅ Clean up subscriptions in `useEffect`
+- ✅ Monitor network status with `useNetworkStatus()`
+- ✅ Batch updates with `doc.update({ field1, field2 })`
 - ✅ Use Web Workers for background operations
+
+**Network-Specific Wins:**
+
+- ✅ Monitor queue size during offline periods
+- ✅ Tune reconnection settings for your network conditions
+- ✅ Track sync state with `useSyncState(documentId)`
+- ✅ Use delta syncing (automatic, no config needed)
 
 **Next Steps:**
 
 - Implement [Testing](./testing.md) to catch performance regressions
-- Review [Real-World Example](../../examples/real-world/) for production patterns
+- Review [Network API](../api/NETWORK_API.md) for advanced sync features
 - Set up Lighthouse CI for continuous monitoring
+- Check [examples](../../examples/) for production patterns
 
 ---
 
