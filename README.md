@@ -28,6 +28,7 @@ SyncKit is a **production-ready sync engine** that makes building local-first ap
 
 ```typescript
 const sync = new SyncKit()
+await sync.init()
 const doc = sync.document<Todo>('todo-123')
 await doc.update({ completed: true })
 // ✨ Works offline, syncs automatically, resolves conflicts
@@ -50,20 +51,20 @@ True offline-first architecture—not just caching. Your app works perfectly on 
 
 ### 📦 **Enterprise Features, Startup Bundle**
 
-**~58 KB gzipped** - WASM-based sync engine with TypeScript SDK.
+**~58 KB gzipped** (9KB SDK + 48KB WASM) - Complete WASM-based sync engine with TypeScript SDK.
 
 Current features (v0.1.0):
 - ✅ Offline-first sync (LWW)
 - ✅ Real-time collaboration
 - ✅ Network protocol support
 - ✅ IndexedDB persistence
-- ✅ Cross-tab sync
+- 🚧 Cross-tab sync (coming in v0.1.1)
 
 Coming in v0.2.0:
 - 🚧 Text CRDTs (character-level editing)
 - 🚧 Counters, Sets (distributed data structures)
 
-**Size-critical apps?** Use Lite variant (~45 KB gzipped, local-only)
+**Size-critical apps?** Use Lite variant (~45 KB gzipped: 1KB SDK + 43KB WASM, local-only)
 
 **Competitive bundle size:** Larger than Yjs (~19KB pure JS), smaller than Automerge (~60-78KB).
 
@@ -71,14 +72,15 @@ Coming in v0.2.0:
 Open source and self-hostable. No vendor lock-in, no surprise $2,000/month bills, complete data sovereignty.
 
 ### ⚡ **Fast by Design**
-- <1ms local operations (371ns single field update)
+- <1ms local operations (~5-20μs single field update)
 - <100ms sync latency (10-50ms p95)
-- ~58KB bundle (~45KB lite option), sub-200KB total with React
+- ~58KB bundle (9KB SDK + 48KB WASM), ~45KB lite option
+- Sub-200KB total with React
 
 ### 🛡️ **Data Integrity Guaranteed**
 - Zero data loss with automatic conflict resolution (Last-Write-Wins)
 - Formal verification with TLA+ (3 bugs found and fixed)
-- 385 comprehensive tests (unit, integration, chaos, load)
+- 2,000+ comprehensive tests (unit, integration, chaos, load)
 
 ---
 
@@ -159,7 +161,7 @@ function TodoApp() {
 - ✅ Persists data in IndexedDB
 - ✅ Resolves conflicts automatically
 
-**Bundle:** SyncKit (~58 KB gzipped) + React (~130 KB) = **~183 KB total**
+**Bundle:** SyncKit (~58 KB gzipped) + React (~130 KB) = **~188 KB total**
 
 **Size-critical?** `import { SyncKit } from '@synckit/sdk/lite'` (~45 KB gzipped, local-only)
 
@@ -176,7 +178,7 @@ function TodoApp() {
 - **🗄️ Local Persistence** - IndexedDB storage, unlimited capacity
 - **🔀 Conflict Resolution** - Automatic Last-Write-Wins (LWW) merge
 - **⚡ Fast Operations** - <1ms local updates, <100ms sync latency
-- **📦 Compact Bundle** - ~58KB gzipped (WASM + SDK)
+- **📦 Compact Bundle** - ~58KB gzipped (9KB SDK + 48KB WASM)
 - **🔐 Secure** - JWT authentication, RBAC permissions
 
 ### Framework Integration
@@ -270,6 +272,11 @@ function TodoApp() {
 **Perfect for:** Task apps, CRMs, project management, note apps (80% of applications)
 
 ```typescript
+// Initialize once
+const sync = new SyncKit()
+await sync.init()
+
+// Use anywhere
 const doc = sync.document<Project>('project-123')
 await doc.update({ status: 'completed' })
 // Conflicts resolved automatically with Last-Write-Wins
@@ -312,7 +319,7 @@ await counter.increment()
 
 ## 🚦 Status
 
-**Current Version:** v0.1.0-dev
+**Current Version:** v0.1.0
 **Production Ready:** Core sync engine, React hooks, TypeScript server ✅
 
 ### What's Complete ✅
@@ -328,6 +335,7 @@ await counter.increment()
 
 ### What's Next 🚧
 
+- 🚧 **Cross-Tab Sync** - BroadcastChannel-based sync across browser tabs (v0.1.1)
 - 🚧 **Text CRDTs** - Collaborative text editing (`useText` hook) for character-level sync
 - 🚧 **Counter CRDTs** - Distributed counters (`useCounter` hook) for conflict-free increments
 - 🚧 **Framework Adapters** - Vue composables (`@synckit/sdk/vue`), Svelte stores (`@synckit/sdk/svelte`)
