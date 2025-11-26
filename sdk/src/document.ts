@@ -329,6 +329,12 @@ export class SyncDocument<T extends Record<string, unknown> = Record<string, unk
       return
     }
 
+    console.log(`[Document] applyRemoteOperation for ${this.id}, field: ${operation.field}, value:`, operation.value)
+    console.log(`[Document] Current state before apply:`, this.data)
+    console.log(`[Document] Current vector clock:`, JSON.stringify(this.vectorClock))
+    console.log(`[Document] Remote vector clock:`, JSON.stringify(operation.clock))
+    console.log(`[Document] Remote clientId:`, operation.clientId)
+
     // Merge vector clocks
     for (const [clientId, count] of Object.entries(operation.clock)) {
       this.vectorClock[clientId] = Math.max(
@@ -337,15 +343,26 @@ export class SyncDocument<T extends Record<string, unknown> = Record<string, unk
       )
     }
 
-    // Apply the operation based on type
-    if (operation.type === 'set' && operation.field) {
-      const clock = BigInt(operation.clock[operation.clientId] || 0)
+    console.log(`[Document] Merged vector clock:`, JSON.stringify(this.vectorClock))
+
+    // Apply the operation
+    // Remote operations from server may not have 'type' field, but they're always 'set' operations
+    if (operation.field) {
+      // Use the maximum clock value from the vector clock as the operation's timestamp
+      // The server may set clientId to "server", but the actual clock is the max across all clients
+      const maxClock = Math.max(...Object.values(operation.clock).map(c => Number(c)))
+      const clock = BigInt(maxClock)
       const valueJson = JSON.stringify(operation.value)
+      console.log(`[Document] Max clock from vector clock: ${maxClock} (from ${Object.keys(operation.clock).length} clients)`)
+      console.log(`[Document] Calling wasmDoc.setField("${operation.field}", ${valueJson}, ${clock}, "${operation.clientId}")`)
       this.wasmDoc.setField(operation.field, valueJson, clock, operation.clientId)
+      console.log(`[Document] ✓ setField completed`)
     }
 
     // Update local state
+    console.log(`[Document] Calling updateLocalState()...`)
     this.updateLocalState()
+    console.log(`[Document] State after updateLocalState():`, this.data)
 
     // Persist changes
     this.persist().catch(error => {
@@ -353,6 +370,7 @@ export class SyncDocument<T extends Record<string, unknown> = Record<string, unk
     })
 
     // Notify subscribers
+    console.log(`[Document] Notifying ${this.subscribers.size} subscribers...`)
     this.notifySubscribers()
   }
 }

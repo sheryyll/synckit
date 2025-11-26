@@ -34,13 +34,11 @@ await doc.update({ completed: true })
 // ✨ Works offline, syncs automatically, resolves conflicts
 ```
 
-<!--
-TODO: Add demo GIF here showing:
-1. Creating a todo in browser tab 1
-2. Todo appearing instantly in browser tab 2
-3. Going offline and making changes
-4. Coming back online and seeing sync
--->
+### 🎬 See It In Action
+
+![SyncKit Demo](demo.gif)
+
+**Real-time collaboration with offline resilience:** Watch tasks sync instantly across tabs—even while offline. The example app demonstrates SyncKit's offline-first capabilities combined with smart browser storage to create a seamless collaborative experience.
 
 ---
 
@@ -58,7 +56,7 @@ Current features (v0.1.0):
 - ✅ Real-time collaboration
 - ✅ Network protocol support
 - ✅ IndexedDB persistence
-- 🚧 Cross-tab sync (coming in v0.1.1)
+- ✅ Cross-tab sync (see [example](examples/project-management))
 
 Coming in v0.2.0:
 - 🚧 Text CRDTs (character-level editing)

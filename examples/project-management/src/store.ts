@@ -161,7 +161,7 @@ export const useStore = create<AppState>((set) => ({
   updateTask: (id, updates) =>
     set((state) => ({
       tasks: state.tasks.map((t) =>
-        t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
+        t.id === id ? { ...t, ...updates, updatedAt: updates.updatedAt ?? Date.now() } : t
       ),
     })),
 

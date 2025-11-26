@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -36,8 +36,14 @@ function DroppableColumn({ children, id }: { children: React.ReactNode; id: stri
 }
 
 export default function KanbanBoard({ sync }: KanbanBoardProps) {
-  const { tasks, activeProjectId, moveTask, updateTask, openTaskModal } = useStore()
+  const { tasks, activeProjectId, moveTask, openTaskModal } = useStore()
   const [activeTask, setActiveTask] = useState<Task | null>(null)
+
+  // Track subscribed task IDs to avoid duplicate subscriptions
+  const subscribedTasksRef = useRef<Map<string, () => void>>(new Map())
+
+  // Debounce timers for batching rapid subscription updates
+  const updateTimersRef = useRef<Map<string, number>>(new Map())
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -47,36 +53,112 @@ export default function KanbanBoard({ sync }: KanbanBoardProps) {
     })
   )
 
-  // Sync tasks with SyncKit
+  // Helper function to subscribe to a task
+  const subscribeToTask = async (taskId: string) => {
+    // Skip if already subscribed
+    if (subscribedTasksRef.current.has(taskId)) {
+      console.log('[Subscribe] Already subscribed to:', taskId)
+      return
+    }
+
+    console.log('[Subscribe] Setting up subscription for:', taskId)
+
+    try {
+      const doc = sync.document<Task>(taskId)
+      await doc.init()
+
+      const unsubscribe = doc.subscribe((updatedTask) => {
+        console.log('[Subscription] Received update for task:', taskId, 'updatedTask:', updatedTask)
+        if (!updatedTask) return
+
+        // Debounce rapid updates - wait 16ms (1 frame) before applying
+        // This batches multiple field updates (status, order, updatedAt) into one state update
+        const existingTimer = updateTimersRef.current.get(taskId)
+        if (existingTimer) {
+          clearTimeout(existingTimer)
+        }
+
+        const timer = setTimeout(() => {
+          const store = useStore.getState()
+          const existingTask = store.tasks.find(t => t.id === taskId)
+
+          if (existingTask) {
+            // Ignore stale updates - only apply if the update is newer or same timestamp
+            if (updatedTask.updatedAt && existingTask.updatedAt && updatedTask.updatedAt < existingTask.updatedAt) {
+              console.log('[Subscription] ⏭️ Ignoring stale update:', taskId,
+                'incoming:', updatedTask.updatedAt, 'current:', existingTask.updatedAt,
+                'delta:', existingTask.updatedAt - updatedTask.updatedAt, 'ms')
+              updateTimersRef.current.delete(taskId)
+              return
+            }
+
+            // Task exists - update it
+            console.log('[Subscription] ✅ Applying batched update for task:', taskId, 'from', existingTask.status, 'to', updatedTask.status)
+            console.log('[Subscription] Full updatedTask object:', JSON.stringify(updatedTask, null, 2))
+            store.updateTask(taskId, updatedTask)
+          } else {
+            // Task is new - add it
+            console.log('[Subscription] Adding new task:', taskId)
+            store.addTask(updatedTask as Task)
+          }
+
+          updateTimersRef.current.delete(taskId)
+        }, 16) // 16ms = ~1 frame at 60fps, enough to batch field updates
+
+        updateTimersRef.current.set(taskId, timer)
+      })
+
+      subscribedTasksRef.current.set(taskId, unsubscribe)
+      console.log('[Subscribe] Successfully subscribed to:', taskId)
+    } catch (error) {
+      console.error(`Failed to subscribe to task ${taskId}:`, error)
+    }
+  }
+
+  // Initial subscription to all existing tasks
   useEffect(() => {
     if (!activeProjectId) return
 
-    // Subscribe to task updates
-    const unsubscribes: (() => void)[] = []
+    const projectTasks = tasks.filter((t) => t.projectId === activeProjectId)
 
-    const initDocs = async () => {
-      const projectTasks = tasks.filter((t) => t.projectId === activeProjectId)
+    // Subscribe to all existing tasks
+    projectTasks.forEach((task) => {
+      subscribeToTask(task.id)
+    })
 
-      for (const task of projectTasks) {
-        const doc = sync.document<Task>(task.id)
-        await doc.init() // Ensure document is initialized
+    // Cleanup only on unmount
+    return () => {
+      subscribedTasksRef.current.forEach((unsubscribe) => unsubscribe())
+      subscribedTasksRef.current.clear()
 
-        const unsubscribe = doc.subscribe((updatedTask) => {
-          if (updatedTask) {
-            updateTask(task.id, updatedTask)
-          }
-        })
+      // Clear any pending timers
+      updateTimersRef.current.forEach((timer) => clearTimeout(timer))
+      updateTimersRef.current.clear()
+    }
+  }, [activeProjectId, sync])
 
-        unsubscribes.push(unsubscribe)
+  // Listen for new tasks from other tabs
+  useEffect(() => {
+    const handleNewTask = (event: CustomEvent) => {
+      const { taskId, taskData } = event.detail
+      console.log('[NewTask Event] Received new task event:', taskId, taskData)
+
+      // Only subscribe if this task belongs to the active project
+      if (taskData && taskData.projectId === activeProjectId) {
+        console.log('[NewTask Event] Task belongs to active project, subscribing...')
+        subscribeToTask(taskId)
+      } else {
+        console.log('[NewTask Event] Task does not belong to active project, skipping')
       }
     }
 
-    initDocs()
+    window.addEventListener('synckit:newtask', handleNewTask as EventListener)
+    console.log('[NewTask Event] Listener registered')
 
     return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe())
+      window.removeEventListener('synckit:newtask', handleNewTask as EventListener)
     }
-  }, [activeProjectId, sync]) // Remove 'tasks' and 'updateTask' to prevent infinite loop
+  }, [activeProjectId, sync])
 
   const projectTasks = tasks.filter((t) => t.projectId === activeProjectId)
 
@@ -100,28 +182,47 @@ export default function KanbanBoard({ sync }: KanbanBoardProps) {
     const targetColumn = columns.find((col) => col.id === overId)
     if (targetColumn) {
       const columnTasks = projectTasks.filter((t) => t.status === targetColumn.id)
-      moveTask(taskId, targetColumn.id, columnTasks.length)
+      const newOrder = columnTasks.length
+      const oldStatus = projectTasks.find(t => t.id === taskId)?.status
 
-      // Update in SyncKit
+      console.log(`[DRAG] Starting drag for ${taskId}: ${oldStatus} -> ${targetColumn.id}`)
+      moveTask(taskId, targetColumn.id, newOrder)
+      console.log(`[DRAG] Local store updated for ${taskId}`)
+
+      // Batch update all 3 fields at once to reduce local notifications
       const doc = sync.document<Task>(taskId)
       await doc.init()
-      const task = projectTasks.find((t) => t.id === taskId)
-      if (task) {
-        await doc.update({ ...task, status: targetColumn.id, updatedAt: Date.now() })
-      }
+      console.log(`[DRAG] Document initialized for ${taskId}`)
+
+      const timestamp = Date.now()
+      await doc.update({
+        status: targetColumn.id,
+        order: newOrder,
+        updatedAt: timestamp,
+      })
+      console.log(`[DRAG] ✅ Batched sync complete for ${taskId}: status=${targetColumn.id}, order=${newOrder}`)
     } else {
       // Dropped over another task - find its column and reorder
       const overTask = projectTasks.find((t) => t.id === overId)
       if (overTask) {
-        moveTask(taskId, overTask.status, overTask.order)
+        const oldStatus = projectTasks.find(t => t.id === taskId)?.status
 
-        // Update in SyncKit
+        console.log(`[DRAG] Starting drag for ${taskId}: ${oldStatus} -> ${overTask.status}`)
+        moveTask(taskId, overTask.status, overTask.order)
+        console.log(`[DRAG] Local store updated for ${taskId}`)
+
+        // Batch update all 3 fields at once to reduce local notifications
         const doc = sync.document<Task>(taskId)
         await doc.init()
-        const task = projectTasks.find((t) => t.id === taskId)
-        if (task) {
-          await doc.update({ ...task, status: overTask.status, updatedAt: Date.now() })
-        }
+        console.log(`[DRAG] Document initialized for ${taskId}`)
+
+        const timestamp = Date.now()
+        await doc.update({
+          status: overTask.status,
+          order: overTask.order,
+          updatedAt: timestamp,
+        })
+        console.log(`[DRAG] ✅ Batched sync complete for ${taskId}: status=${overTask.status}, order=${overTask.order}`)
       }
     }
 

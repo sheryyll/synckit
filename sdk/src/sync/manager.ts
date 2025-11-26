@@ -82,6 +82,9 @@ export class SyncManager {
   private syncStates = new Map<string, DocumentSyncState>()
   private pendingOperations = new Map<string, Operation[]>()
 
+  // Buffer for operations that arrive before documents are registered
+  private bufferedOperations = new Map<string, Operation[]>()
+
   // ACK tracking
   private pendingAcks = new Map<string, { operation: Operation; timeout: NodeJS.Timeout }>()
   private readonly ACK_TIMEOUT = 5000 // 5 seconds
@@ -103,7 +106,9 @@ export class SyncManager {
    */
   registerDocument(document: SyncableDocument): void {
     const documentId = document.getId()
+    console.log('[SyncManager] Registering document:', documentId)
     this.documents.set(documentId, document)
+    console.log('[SyncManager] Total registered documents:', this.documents.size, 'IDs:', Array.from(this.documents.keys()))
 
     // Initialize sync state
     if (!this.syncStates.has(documentId)) {
@@ -114,6 +119,20 @@ export class SyncManager {
         error: null,
         pendingOperations: 0,
       })
+    }
+
+    // Apply any buffered operations that arrived before registration
+    const buffered = this.bufferedOperations.get(documentId)
+    if (buffered && buffered.length > 0) {
+      console.log(`📦 [SyncManager] Applying ${buffered.length} buffered operations for ${documentId}`)
+      for (const operation of buffered) {
+        console.log(`📦 [SyncManager] Applying buffered: ${operation.field}=${operation.value}`)
+        document.applyRemoteOperation(operation)
+        this.mergeVectorClocks(document, operation.clock)
+      }
+      // Clear the buffer
+      this.bufferedOperations.delete(documentId)
+      console.log(`📦 [SyncManager] ✅ All buffered operations applied for ${documentId}`)
     }
   }
 
@@ -132,19 +151,31 @@ export class SyncManager {
    * Requests initial state from server if not in local storage
    */
   async subscribeDocument(documentId: string): Promise<void> {
+    console.log('[SyncManager] subscribeDocument called for:', documentId)
+
     // Check if already subscribed
     if (this.subscriptions.has(documentId)) {
+      console.log('[SyncManager] Already subscribed to:', documentId)
       return
     }
+
+    // If offline, defer subscription until reconnection
+    if (!this.websocket.isConnected()) {
+      console.log('[SyncManager] Offline, deferring subscription for:', documentId)
+      this.updateSyncState(documentId, {
+        state: 'offline',
+        error: null,
+      })
+      // Subscription will be attempted on reconnection
+      return
+    }
+
+    console.log('[SyncManager] Sending subscription request for:', documentId)
 
     // Update state
     this.updateSyncState(documentId, { state: 'syncing' })
 
     try {
-      if (!this.websocket.isConnected()) {
-        throw new Error('WebSocket not connected')
-      }
-
       // Send subscription message to server
       this.websocket.send({
         type: 'subscribe',
@@ -157,11 +188,13 @@ export class SyncManager {
 
       // Mark as subscribed
       this.subscriptions.add(documentId)
+      console.log('[SyncManager] ✓ Subscribed to:', documentId, 'Total subscriptions:', this.subscriptions.size)
       this.updateSyncState(documentId, {
         state: 'synced',
         lastSyncedAt: Date.now(),
       })
     } catch (error) {
+      console.error('[SyncManager] ❌ Subscription failed for:', documentId, error)
       this.updateSyncState(documentId, {
         state: 'error',
         error: String(error),
@@ -195,15 +228,16 @@ export class SyncManager {
    * Push local operation to server
    * Queues operation if offline
    */
-  async pushOperation(operation: Operation): Promise<void> {
+  async pushOperation(operation: Operation, forceSend = false): Promise<void> {
     const { documentId } = operation
 
     // Increment pending count
     this.incrementPendingOperations(documentId)
 
     try {
-      if (this.websocket.isConnected()) {
+      if (forceSend || this.websocket.isConnected()) {
         // Send immediately
+        console.log(`[SyncManager] 📤 Sending operation ${forceSend ? '(FORCED)' : 'online'}:`, documentId, operation.field, operation.value)
         const messageId = this.generateMessageId()
 
         this.websocket.send({
@@ -220,12 +254,16 @@ export class SyncManager {
         this.updateSyncState(documentId, { lastSyncedAt: Date.now() })
       } else {
         // Queue for offline replay
+        console.log(`[SyncManager] 💾 Queuing operation (OFFLINE):`, documentId, operation.field, operation.value)
         await this.offlineQueue.enqueue(operation)
+        const stats = this.offlineQueue.getStats()
+        console.log(`[SyncManager] 💾 Queue stats:`, stats)
         this.updateSyncState(documentId, { state: 'offline' })
         this.decrementPendingOperations(documentId)
       }
     } catch (error) {
       // On error, also queue for retry
+      console.log(`[SyncManager] ❌ Error sending operation, queuing:`, documentId, error)
       await this.offlineQueue.enqueue(operation)
       this.decrementPendingOperations(documentId)
       throw error
@@ -361,23 +399,42 @@ export class SyncManager {
    * Handle connection restored
    */
   private handleConnectionRestored(): void {
+    console.log(`[SyncManager] 🔄 Connection restored! Starting reconnection flow...`)
+
+    // Get all registered document IDs (includes offline-created docs)
+    const allDocumentIds = Array.from(this.documents.keys())
+    console.log(`[SyncManager] 🔄 Registered documents:`, allDocumentIds)
+
     // Mark all documents as syncing
-    for (const documentId of this.subscriptions) {
+    for (const documentId of allDocumentIds) {
       this.updateSyncState(documentId, { state: 'syncing' })
     }
 
-    // Re-subscribe all documents
-    for (const documentId of this.subscriptions) {
+    // Subscribe all registered documents (re-subscribe + new offline docs)
+    for (const documentId of allDocumentIds) {
+      // Clear from subscriptions first to allow re-subscription
+      this.subscriptions.delete(documentId)
+
       this.subscribeDocument(documentId).catch((error) => {
-        console.error(`Failed to re-subscribe ${documentId}:`, error)
+        console.error(`Failed to subscribe ${documentId}:`, error)
       })
     }
 
+    // Check queue stats before replay
+    const queueStats = this.offlineQueue.getStats()
+    console.log(`[SyncManager] 🔄 Offline queue stats before replay:`, queueStats)
+
     // Replay offline queue
     this.offlineQueue
-      .replay((op) => this.pushOperation(op))
+      .replay((op) => {
+        console.log(`[SyncManager] 🔄 Replaying operation:`, op.documentId, op.field, op.value)
+        return this.pushOperation(op, true) // Force send, bypassing offline check
+      })
+      .then((count) => {
+        console.log(`[SyncManager] ✅ Replay complete! Sent ${count} operations`)
+      })
       .catch((error) => {
-        console.error('Failed to replay offline queue:', error)
+        console.error('[SyncManager] ❌ Failed to replay offline queue:', error)
       })
   }
 
@@ -435,11 +492,24 @@ export class SyncManager {
     const operation: Operation = payload
     const { documentId } = operation
 
+    console.log('[SyncManager] Received remote operation for document:', documentId, 'field:', operation.field, 'value:', operation.value)
+    console.log('[SyncManager] Registered documents:', Array.from(this.documents.keys()))
+
     const document = this.documents.get(documentId)
     if (!document) {
-      console.warn(`Received operation for unknown document: ${documentId}`)
+      console.warn(`❌ [SyncManager] Received operation for UNREGISTERED document: ${documentId}`)
+      console.warn(`❌ [SyncManager] Available documents:`, Array.from(this.documents.keys()))
+
+      // Buffer the operation for later application when document registers
+      console.log(`📦 [SyncManager] Buffering operation for later: ${documentId} ${operation.field}=${operation.value}`)
+      const buffered = this.bufferedOperations.get(documentId) || []
+      buffered.push(operation)
+      this.bufferedOperations.set(documentId, buffered)
+      console.log(`📦 [SyncManager] Buffered operations for ${documentId}:`, buffered.length)
       return
     }
+
+    console.log('[SyncManager] ✓ Document found, applying remote operation')
 
     // Check for conflict
     const localOps = this.pendingOperations.get(documentId) || []

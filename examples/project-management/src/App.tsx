@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { SyncKit } from '@synckit/sdk'
 import { SyncProvider } from '@synckit/sdk/react'
 import { useStore } from './store'
+import type { Task } from './types'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import KanbanBoard from './components/KanbanBoard'
@@ -93,7 +94,53 @@ function App() {
       return ['task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6']
     }
 
+    // Listen for new tasks created in other tabs (cross-tab sync)
+    const handleStorageChange = async (event: StorageEvent) => {
+      // Only handle changes to task IDs
+      if (event.key !== 'synckit-task-ids') return
+
+      const newTaskIds = event.newValue ? JSON.parse(event.newValue) : []
+      const oldTaskIds = event.oldValue ? JSON.parse(event.oldValue) : []
+
+      // Find newly added task IDs
+      const addedTaskIds = newTaskIds.filter((id: string) => !oldTaskIds.includes(id))
+
+      // Notify about new task IDs so components can subscribe
+      for (const taskId of addedTaskIds) {
+        try {
+          const doc = sync.document<Task>(taskId)
+          await doc.init()
+
+          // Check if data already exists locally
+          const existingData = doc.get()
+
+          if (existingData && Object.keys(existingData).length > 0) {
+            // Data already here - add to store immediately
+            const currentTasks = useStore.getState().tasks
+            if (!currentTasks.find(t => t.id === taskId)) {
+              useStore.setState({ tasks: [...currentTasks, existingData as Task] })
+              // Dispatch event so KanbanBoard can subscribe
+              window.dispatchEvent(new CustomEvent('synckit:newtask', { detail: { taskId, taskData: existingData } }))
+            }
+          } else {
+            // Data not here yet - will arrive from server via subscription
+            // Dispatch event with just taskId so KanbanBoard subscribes and waits for data
+            window.dispatchEvent(new CustomEvent('synckit:newtask', { detail: { taskId, taskData: { id: taskId, projectId: 'project-1' } } }))
+          }
+        } catch (error) {
+          console.warn(`Failed to load new task ${taskId} from other tab:`, error)
+        }
+      }
+    }
+
+    // Register storage event listener (fires when localStorage changes in OTHER tabs)
+    window.addEventListener('storage', handleStorageChange)
+
     initializeApp()
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, [])
 
   if (!syncReady) {

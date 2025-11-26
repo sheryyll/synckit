@@ -92,6 +92,9 @@ export default function TaskModal({ sync }: TaskModalProps) {
       addTask(taskData)
       // Save task ID to localStorage for persistence
       saveTaskIdToStorage(taskData.id)
+
+      // Notify other components about new task (for subscription)
+      window.dispatchEvent(new CustomEvent('synckit:newtask', { detail: { taskId: taskData.id, taskData } }))
     }
 
     closeTaskModal()
