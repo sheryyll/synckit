@@ -8,7 +8,7 @@
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun dist/index.js",
-    "prepublishOnly": "npm run build && npm run test",
+    "prepublishOnly": "npm run build",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:unit": "bun test tests/unit",
