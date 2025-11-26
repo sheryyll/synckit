@@ -32,6 +32,12 @@ yarn-error.log*
 # !server/*/bun.lockb
 # Uncomment above when lock files exist
 
+# Examples - users will generate their own lock files
+examples/*/package-lock.json
+examples/*/bun.lockb
+examples/*/yarn.lock
+examples/*/pnpm-lock.yaml
+
 # Environment
 .env
 .env.local
